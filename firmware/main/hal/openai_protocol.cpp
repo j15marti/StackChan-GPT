@@ -1043,7 +1043,10 @@ void OpenaiProtocol::ProcessUtterance(std::vector<int16_t>&& pcm, bool is_wake_c
 
     ESP_LOGI(TAG, "StackChan (%s): \"%s\"", emotion.c_str(), reply_text.c_str());
 
-    // Enter kDeviceStateSpeaking and wait for main loop to finish ResetDecoder() before pushing TTS packets
+    auto& audio_svc = Application::GetInstance().GetAudioService();
+    audio_svc.ResetDecoder();
+
+    // Enter kDeviceStateSpeaking and wait for main loop to finish UI state transition before pushing TTS packets
     hal_openai::set_thinking_led_active(false);
     EmitEmotion(emotion);
     EmitTtsState("start");
@@ -1054,8 +1057,7 @@ void OpenaiProtocol::ProcessUtterance(std::vector<int16_t>&& pcm, bool is_wake_c
         ESP_LOGE(TAG, "TTS failed: %s", error_msg.c_str());
     }
 
-    auto& audio_svc = Application::GetInstance().GetAudioService();
-    int wait_ms     = 0;
+    int wait_ms = 0;
     while (!abort_requested_.load() && !audio_svc.IsPlaybackIdle() && wait_ms < 30000) {
         vTaskDelay(pdMS_TO_TICKS(50));
         wait_ms += 50;
@@ -1310,8 +1312,9 @@ void OpenaiProtocol::HandleLiveServerEvent(const char* data, size_t len)
         std::vector<int16_t> pcm;
         if (live_turn_active_.load() && !abort_requested_.load() && cJSON_IsString(delta) &&
             base64_decode_pcm(delta->valuestring, std::strlen(delta->valuestring), pcm)) {
-            const bool is_rt = live_is_realtime_api_.load();
-            const int rms    = compute_rms(pcm);
+            live_output_started_ = true;
+            const bool is_rt     = live_is_realtime_api_.load();
+            const int rms        = compute_rms(pcm);
             // Trigger speech onset on soft initial consonants/vowels (> 28 RMS) and prepend the pre-onset buffer
             // so the start of the first word is never clipped.
             const bool trigger_start = is_rt || (rms > 28);
@@ -1329,9 +1332,8 @@ void OpenaiProtocol::HandleLiveServerEvent(const char* data, size_t len)
                     hal_openai::set_thinking_led_active(false);
                     EmitEmotion("happy");
                     EmitTtsState("start");
-                    wait_for_main_loop_drain();
                 }
-                std::vector<int16_t> ready_chunk;
+                std::vector<std::vector<int16_t>> ready_chunks;
                 {
                     std::lock_guard<std::mutex> lock(live_mutex_);
                     if (!live_pre_onset_pcm_.empty()) {
@@ -1340,14 +1342,14 @@ void OpenaiProtocol::HandleLiveServerEvent(const char* data, size_t len)
                         live_pre_onset_pcm_.clear();
                     }
                     live_pcm_accum_.insert(live_pcm_accum_.end(), pcm.begin(), pcm.end());
-                    if (live_pcm_accum_.size() >= kCoalesceSamples) {
-                        ready_chunk.assign(live_pcm_accum_.begin(), live_pcm_accum_.begin() + kCoalesceSamples);
+                    while (live_pcm_accum_.size() >= kCoalesceSamples) {
+                        ready_chunks.emplace_back(live_pcm_accum_.begin(), live_pcm_accum_.begin() + kCoalesceSamples);
                         live_pcm_accum_.erase(live_pcm_accum_.begin(), live_pcm_accum_.begin() + kCoalesceSamples);
                     }
                 }
-                if (!ready_chunk.empty()) {
-                    Application::GetInstance().GetAudioService().PushPcmToPlaybackQueue(std::move(ready_chunk),
-                                                                                        kLiveSampleRate, true);
+                auto& audio_svc = Application::GetInstance().GetAudioService();
+                for (auto& chunk : ready_chunks) {
+                    audio_svc.PushPcmToPlaybackQueue(std::move(chunk), kLiveSampleRate, true);
                 }
             } else if (!live_speaking_.load()) {
                 // Keep the last ~120 ms (2880 samples @ 24 kHz) before speech onset so soft word starts aren't lost
@@ -1365,6 +1367,7 @@ void OpenaiProtocol::HandleLiveServerEvent(const char* data, size_t len)
                type == "response.text.delta") {
         cJSON* delta = cJSON_GetObjectItem(root, "delta");
         if (live_turn_active_.load() && cJSON_IsString(delta)) {
+            live_output_started_   = true;
             last_live_audio_rx_us_ = esp_timer_get_time();
             std::lock_guard<std::mutex> lock(live_mutex_);
             live_transcript_accum_ += delta->valuestring;
@@ -1475,14 +1478,16 @@ bool OpenaiProtocol::StreamUtteranceOverLiveWs(const std::vector<int16_t>& pcm, 
         std::lock_guard<std::mutex> lock(live_mutex_);
         live_transcript_accum_.clear();
         live_pcm_accum_.clear();
-        live_pcm_accum_.reserve(1440 * 2);
+        live_pcm_accum_.reserve(1440 * 8);
         live_pre_onset_pcm_.clear();
         live_pre_onset_pcm_.reserve(2880);
         g_live_pending_calls.clear();
         g_live_error.clear();
         g_live_user_transcript.clear();
     }
+    Application::GetInstance().GetAudioService().ResetDecoder();
     live_speaking_          = false;
+    live_output_started_    = false;
     live_delegation_active_ = false;
     live_turn_active_       = true;
     last_live_audio_rx_us_  = esp_timer_get_time();
@@ -1531,7 +1536,7 @@ bool OpenaiProtocol::StreamUtteranceOverLiveWs(const std::vector<int16_t>& pcm, 
         // GPT-Live (/v1/live/sessions): stream 750 ms PCM16 chunks; stop immediately once GPT-Live starts replying or delegating
         size_t chunks_sent = 0;
         for (size_t offset = 0; offset < pcm24.size(); offset += kLiveUploadSamples) {
-            if (live_speaking_.load() || live_delegation_active_.load()) {
+            if (live_output_started_.load() || live_speaking_.load() || live_delegation_active_.load()) {
                 break;
             }
             const size_t count = std::min(kLiveUploadSamples, pcm24.size() - offset);
@@ -1544,13 +1549,14 @@ bool OpenaiProtocol::StreamUtteranceOverLiveWs(const std::vector<int16_t>& pcm, 
                 return false;
             }
             ++chunks_sent;
-            if (live_speaking_.load() || live_delegation_active_.load()) {
+            if (live_output_started_.load() || live_speaking_.load() || live_delegation_active_.load()) {
                 break;
             }
             vTaskDelay(pdMS_TO_TICKS(chunks_sent >= 6 ? 450 : 20));
         }
         // Append 800 ms of trailing silence (two 400 ms chunks) to trigger GPT-Live's server VAD if not already replying
-        for (int i = 0; i < 2 && !live_speaking_.load() && !live_delegation_active_.load(); ++i) {
+        for (int i = 0; i < 2 && !live_output_started_.load() && !live_speaking_.load() && !live_delegation_active_.load();
+             ++i) {
             if (!live_ws_->Send(live_silence_400ms_msg)) {
                 live_turn_active_ = false;
                 out_error         = "Live silence append failed";
@@ -1592,8 +1598,9 @@ bool OpenaiProtocol::StreamUtteranceOverLiveWs(const std::vector<int16_t>& pcm, 
                     done = true;
                     break;
                 }
-                // Advance the GPT-Live session timeline every 400 ms while waiting for delegation/speech to start
-                if (!live_speaking_.load() && (waited_ms % 400) == 0 && live_ws_ && live_ws_->IsConnected()) {
+                // Advance the GPT-Live session timeline every 400 ms ONLY before any output arrives
+                if (!live_output_started_.load() && !live_speaking_.load() && !live_delegation_active_.load() &&
+                    (waited_ms % 400) == 0 && live_ws_ && live_ws_->IsConnected()) {
                     live_ws_->Send(live_silence_400ms_msg);
                 }
             }
@@ -1693,6 +1700,7 @@ bool OpenaiProtocol::StreamUtteranceOverLiveWs(const std::vector<int16_t>& pcm, 
         if (!tail_pcm.empty()) {
             audio_svc.PushPcmToPlaybackQueue(std::move(tail_pcm), kLiveSampleRate, true);
         }
+        audio_svc.NotifyStreamComplete();
         int wait_ms = 0;
         while (!abort_requested_.load() && !audio_svc.IsPlaybackIdle() && wait_ms < 15000) {
             vTaskDelay(pdMS_TO_TICKS(50));
@@ -1702,6 +1710,8 @@ bool OpenaiProtocol::StreamUtteranceOverLiveWs(const std::vector<int16_t>& pcm, 
         // Text-only Live reply: speak it with the HTTP TTS endpoint
         std::string emotion;
         parse_emotion_prefix(assistant_text, emotion);
+        auto& audio_svc = Application::GetInstance().GetAudioService();
+        audio_svc.ResetDecoder();
         hal_openai::set_thinking_led_active(false);
         EmitEmotion(emotion);
         EmitTtsState("start");
@@ -1709,8 +1719,7 @@ bool OpenaiProtocol::StreamUtteranceOverLiveWs(const std::vector<int16_t>& pcm, 
         wait_for_main_loop_drain();
         std::string tts_error;
         StreamTtsAudio(assistant_text, tts_error);
-        auto& audio_svc = Application::GetInstance().GetAudioService();
-        int wait_ms     = 0;
+        int wait_ms = 0;
         while (!abort_requested_.load() && !audio_svc.IsPlaybackIdle() && wait_ms < 30000) {
             vTaskDelay(pdMS_TO_TICKS(50));
             wait_ms += 50;
@@ -2191,7 +2200,7 @@ bool OpenaiProtocol::StreamTtsAudio(const std::string& text, std::string& out_er
     http_cfg.url                      = url.c_str();
     http_cfg.method                   = HTTP_METHOD_POST;
     http_cfg.timeout_ms               = kHttpTimeoutMs;
-    http_cfg.buffer_size              = 4096;
+    http_cfg.buffer_size              = 8192;
     http_cfg.buffer_size_tx           = 1024;
 
     esp_http_client_handle_t client = esp_http_client_init(&http_cfg);
@@ -2243,16 +2252,17 @@ bool OpenaiProtocol::StreamTtsAudio(const std::string& text, std::string& out_er
     });
     demuxer.Reset();
 
-    uint8_t buf[2048];
+    std::vector<uint8_t> buf(4096);
     size_t total_bytes = 0;
     while (!abort_requested_.load()) {
-        int r = esp_http_client_read(client, reinterpret_cast<char*>(buf), sizeof(buf));
+        int r = esp_http_client_read(client, reinterpret_cast<char*>(buf.data()), buf.size());
         if (r <= 0) {
             break;
         }
         total_bytes += r;
-        demuxer.Process(buf, static_cast<size_t>(r));
+        demuxer.Process(buf.data(), static_cast<size_t>(r));
     }
+    audio_svc.NotifyStreamComplete();
 
     ESP_LOGI(TAG, "TTS stream complete: %u bytes, %u opus packets", static_cast<unsigned>(total_bytes),
              static_cast<unsigned>(opus_packets));

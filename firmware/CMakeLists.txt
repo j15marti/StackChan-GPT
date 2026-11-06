@@ -7,7 +7,7 @@ if(CMAKE_GENERATOR MATCHES "^Ninja")
     set(CMAKE_NINJA_FORCE_RESPONSE_FILE TRUE CACHE INTERNAL "Use Ninja response files")
 endif()
 
-set(PROJECT_VER "1.8.4")
+set(PROJECT_VER "1.8.5")
 add_definitions(-DFIRMWARE_VERSION=\"${PROJECT_VER}\")
 
 # Add this line to disable the specific warning

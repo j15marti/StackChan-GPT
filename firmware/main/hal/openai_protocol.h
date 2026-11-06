@@ -80,6 +80,7 @@ private:
     std::atomic<bool> live_is_realtime_api_{false};
     std::atomic<bool> live_turn_active_{false};
     std::atomic<bool> live_speaking_{false};
+    std::atomic<bool> live_output_started_{false};
     std::atomic<bool> live_delegation_active_{false};
     std::atomic<int64_t> last_live_audio_rx_us_{0};
     std::string live_transcript_accum_;

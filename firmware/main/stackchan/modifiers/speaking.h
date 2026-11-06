@@ -37,7 +37,7 @@ public:
 
         // 动作计时
         if (_enable_motion) {
-            _next_motion_tick = now + Random::getInstance().getInt(1000, 2000);
+            _next_motion_tick = now + Random::getInstance().getInt(2200, 3200);
         }
 
         _need_get_prev_angles = true;
