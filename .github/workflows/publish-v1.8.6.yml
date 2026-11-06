@@ -1,0 +1,81 @@
+name: Publish StackChan-GPT v1.8.6
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .release/v1.8.6/**
+      - .github/workflows/publish-v1.8.6.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.repository == 'j15marti/StackChan-GPT'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct and verify merged firmware
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .release/v1.8.6/chunk-* > StackChan-GPT-v1.8.6.bin
+          test "$(stat -c %s StackChan-GPT-v1.8.6.bin)" = "12857054"
+          sha256sum --check StackChan-GPT-v1.8.6.sha256
+
+      - name: Commit the merged firmware image
+        id: firmware_commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -r .release/v1.8.6
+          git rm .github/workflows/publish-v1.8.6.yml
+          git rm StackChan-GPT-v1.8.5.bin
+          git add StackChan-GPT-v1.8.6.bin
+          git commit -m "Release v1.8.6: publish merged firmware image"
+          git push origin HEAD:main
+          echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.firmware_commit.outputs.release_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
+          ## StackChan-GPT v1.8.6
+
+          Adds live web search for current news, weather, and public web information to both normal chat and GPT-Live/Realtime voice modes.
+
+          ### Highlights
+
+          - Uses OpenAI Responses `web_search` through the API key already configured on StackChan.
+          - Preserves the existing hardware, motion, LED, vision, reminder, and conversation tools.
+          - Adds a local setup-portal page for the latest answer and clickable source links.
+          - Validates that a search completed and returned source URLs before accepting the result.
+          - Adds host tests for request construction, response parsing, citations, and failure handling.
+
+          ### Flashing
+
+          Flash `StackChan-GPT-v1.8.6.bin` at address `0x0` on the 16 MB ESP32-S3 StackChan. Back up settings to microSD first because the merged image overwrites the NVS settings area.
+
+          SHA-256: `e42f58f7866c37234356c0d7041f48336c7a911042bb289cf2cca857d10abb0a`
+
+          Compilation, host tests, image checks, and checksum verification passed. Physical-device and live authenticated API testing remain unverified.
+          EOF
+          gh release create v1.8.6 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$RELEASE_SHA" \
+            --title "StackChan-GPT v1.8.6" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
+            StackChan-GPT-v1.8.6.bin \
+            StackChan-GPT-v1.8.6.sha256

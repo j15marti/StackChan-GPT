@@ -89,3 +89,34 @@ idf.py build
 ```bash
 idf.py -p /dev/cu.usbmodem* flash monitor
 ```
+
+
+## Live web search (v1.8.6)
+
+Ask a self-contained question such as "Search the web for today's Los Angeles news" or
+"What is the weather in Long Beach today?" The firmware exposes `self.web.search` to both
+HTTP chat and GPT-Live/Realtime voice. It calls `/v1/responses` with hosted `web_search`
+using `gpt-4.1-mini`, independently of your selected voice/chat model. The existing API key
+and base URL are reused. A custom base URL must support Responses and hosted web search.
+Search calls incur additional OpenAI API charges and may take longer than ordinary replies.
+
+No additional setup is needed with the standard OpenAI base URL. Your account must have
+access to the search model. Builders may override `OPENAI_WEB_SEARCH_MODEL_DEFAULT` in
+`main/openai_config.h` with another compatible non-reasoning model.
+
+The tool returns explicit errors on HTTP failures, incomplete results, or missing sources.
+It requests live access, requires search execution, and retains the most recent answer and
+source links in RAM. Open `SETUP -> GPT-Live -> OpenAI API`, scan the QR code, then select
+**Latest web search and source links**. This page is on your local network and is cleared
+on restart. It is not a remotely accessible browsing service.
+
+For host tests after dependencies have been downloaded:
+
+```bash
+cmake -S tests -B build-host -DCJSON_DIR="$PWD/managed_components/espressif__cjson/cJSON"
+cmake --build build-host
+ctest --test-dir build-host --output-on-failure
+```
+
+Alternatively set `CJSON_DIR` to a checkout of cJSON v1.7.19. See
+[build and validation notes](../docs/WEB_SEARCH_v1.8.6.md) for the delivered images.

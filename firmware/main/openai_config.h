@@ -4,6 +4,11 @@
  * SPDX-License-Identifier: MIT
  */
 #pragma once
+
+// Independent of the selected conversation/voice model; uses the same configured API key/base URL.
+#ifndef OPENAI_WEB_SEARCH_MODEL_DEFAULT
+#define OPENAI_WEB_SEARCH_MODEL_DEFAULT "gpt-4.1-mini"
+#endif
 #include <sdkconfig.h>
 
 /**

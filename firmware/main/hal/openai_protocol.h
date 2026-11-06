@@ -107,4 +107,5 @@ private:
                                     std::string& out_error);
     bool StreamTtsAudio(const std::string& text, std::string& out_error);
     std::string ExplainCameraPhotoWithOpenai(const std::string& question);
+    std::string SearchWebWithOpenai(const std::string& arguments);
 };

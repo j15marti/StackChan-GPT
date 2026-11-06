@@ -45,5 +45,6 @@ bool start_web_config_server();
 void stop_web_config_server();
 bool is_web_config_server_running();
 std::string get_web_config_url();
+void set_last_web_search(const std::string& result);
 
 }  // namespace hal_openai

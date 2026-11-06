@@ -23,12 +23,21 @@ static const std::string_view _tag    = "HAL-OpenAI";
 static const std::string_view _nvs_ns = "openai";
 
 static std::mutex _config_mutex;
+static std::mutex _web_search_mutex;
+static std::string _last_web_search = R"({"ok":false,"error":"No web search yet since startup."})";
 static std::atomic<bool> _custom_led_active{false};
 static std::atomic<bool> _thinking_led_active{false};
 static std::atomic<uint32_t> _last_voice_playback_ms{0};
 static httpd_handle_t _http_server = nullptr;
 
 namespace hal_openai {
+
+void set_last_web_search(const std::string& result)
+{
+    std::lock_guard<std::mutex> lock(_web_search_mutex);
+    _last_web_search = result.size() <= 96000 ? result :
+        R"({"ok":false,"error":"Search result too large to display."})";
+}
 
 static std::string trim_trailing_slash(std::string url)
 {
@@ -452,6 +461,7 @@ static const char kWebPortalHtml[] = R"rawliteral(
     </form>
     <button type="button" id="testBtn" class="btn-secondary">Test Servos &amp; RGB LEDs</button>
     <div id="status"></div>
+    <p><a href="/web-search" style="color:#6ee7b7">Latest web search and source links</a></p>
   </div>
 </div>
 <script>
@@ -511,6 +521,47 @@ static esp_err_t handle_get_root(httpd_req_t* req)
 {
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     return httpd_resp_send(req, kWebPortalHtml, HTTPD_RESP_USE_STRLEN);
+}
+
+static esp_err_t handle_get_web_search(httpd_req_t* req)
+{
+    std::lock_guard<std::mutex> lock(_web_search_mutex);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, _last_web_search.c_str(), _last_web_search.size());
+}
+
+static esp_err_t handle_get_web_search_page(httpd_req_t* req)
+{
+    static const char page[] = R"html(<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>StackChan web search</title>
+<style>body{font:18px system-ui;max-width:700px;margin:24px auto;padding:16px;line-height:1.5}
+#answer{white-space:pre-wrap}a{overflow-wrap:anywhere}</style>
+<h1>Latest web search</h1><p>Most recent result since startup. Refresh after another search.</p>
+<div id="answer">Loading...</div><p id="sources"></p><p><a href="/">OpenAI settings</a></p>
+<script>
+fetch('/api/web-search',{cache:'no-store'}).then(r=>r.json()).then(d=>{
+  const answer=document.getElementById('answer');answer.textContent=d.ok?'':d.error;
+  if(d.ok){
+    const chars=Array.from(d.answer||'');let offset=0;
+    for(const c of (d.citations||[]).sort((a,b)=>a.start-b.start)){
+      if(!/^https?:\/\//.test(c.url)||c.start<offset||c.end>chars.length||c.end<=c.start)continue;
+      answer.append(document.createTextNode(chars.slice(offset,c.start).join('')));
+      const a=document.createElement('a');a.href=c.url;a.target='_blank';a.rel='noopener noreferrer';
+      a.textContent='['+(c.title||'Source')+']';answer.append(a);offset=c.end;
+    }
+    answer.append(document.createTextNode(chars.slice(offset).join('')));
+  }
+  if(d.ok) for(const [i,s] of (d.sources||[]).entries()) {
+    if(!/^https?:\/\//.test(s.url))continue;
+    const a=document.createElement('a');a.href=s.url;a.target='_blank';a.rel='noopener noreferrer';
+    a.textContent='['+(i+1)+'] '+(s.title||s.url);
+    document.getElementById('sources').append(a,document.createElement('br'));
+  }
+}).catch(()=>{document.getElementById('answer').textContent='Unable to load search result.'});
+</script></html>)html";
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    return httpd_resp_send(req, page, HTTPD_RESP_USE_STRLEN);
 }
 
 static esp_err_t handle_get_config(httpd_req_t* req)
@@ -644,12 +695,18 @@ bool start_web_config_server()
         .uri = "/", .method = HTTP_GET, .handler = handle_get_root, .user_ctx = nullptr};
     static const httpd_uri_t uri_get_cfg = {
         .uri = "/api/config", .method = HTTP_GET, .handler = handle_get_config, .user_ctx = nullptr};
+    static const httpd_uri_t uri_search = {
+        .uri = "/api/web-search", .method = HTTP_GET, .handler = handle_get_web_search, .user_ctx = nullptr};
+    static const httpd_uri_t uri_search_page = {
+        .uri = "/web-search", .method = HTTP_GET, .handler = handle_get_web_search_page, .user_ctx = nullptr};
     static const httpd_uri_t uri_post_cfg = {
         .uri = "/api/config", .method = HTTP_POST, .handler = handle_post_config, .user_ctx = nullptr};
     static const httpd_uri_t uri_post_test = {
         .uri = "/api/test_hardware", .method = HTTP_POST, .handler = handle_post_test_hardware, .user_ctx = nullptr};
 
     httpd_register_uri_handler(_http_server, &uri_root);
+    httpd_register_uri_handler(_http_server, &uri_search);
+    httpd_register_uri_handler(_http_server, &uri_search_page);
     httpd_register_uri_handler(_http_server, &uri_get_cfg);
     httpd_register_uri_handler(_http_server, &uri_post_cfg);
     httpd_register_uri_handler(_http_server, &uri_post_test);
