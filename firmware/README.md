@@ -120,3 +120,17 @@ ctest --test-dir build-host --output-on-failure
 
 Alternatively set `CJSON_DIR` to a checkout of cJSON v1.7.19. See
 [build and validation notes](../docs/WEB_SEARCH_v1.8.6.md) for the delivered images.
+
+## Deterministic idle camera tracking (v1.8.7)
+
+When the assistant has remained idle with audio playback drained for 30 seconds, the firmware
+checks the CoreS3 camera every 10 seconds. Each check compares the luma values of two raw frames
+captured 250 ms apart. A quadrant triggers tracking only when strictly more than 10% of its pixels
+change after global brightness compensation.
+
+During a tracking session, StackChan estimates the centroid of the changed pixels and adjusts yaw
+and pitch toward the center of the frame. It samples movement at approximately one-second intervals
+and stops after 30 seconds. Listening, speaking, notification playback, touch interaction, or another
+servo modifier cancels tracking. Camera frames remain in volatile memory and are neither encoded for
+upload nor sent to an AI model. See the
+[v1.8.7 behavior and validation notes](../docs/IDLE_CAMERA_TRACKING_v1.8.7.md).

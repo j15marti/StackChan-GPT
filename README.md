@@ -4,17 +4,19 @@
 
 This repository contains the official [m5stack/StackChan](https://github.com/m5stack/StackChan) firmware modified to use the **OpenAI API** directly when the **`GPT-Live`** (`Agent.ai`) app is selected on the device, without signing into or activating against the original Xiaozhi / M5Stack AI server.
 
-## Quick Flash (`StackChan-GPT-v1.8.6.bin`)
+## Quick Flash (`StackChan-GPT-v1.8.7.bin`)
 
-A pre-built merged firmware image for the 16 MB ESP32-S3 board ([`StackChan-GPT-v1.8.6.bin`](StackChan-GPT-v1.8.6.bin)) is included in the repository root:
+A pre-built merged firmware image for the 16 MB ESP32-S3 board ([`StackChan-GPT-v1.8.7.bin`](StackChan-GPT-v1.8.7.bin)) is included in the repository root:
 
 ```bash
-esptool.py --chip esp32s3 -p /dev/cu.usbmodem* -b 460800 write_flash 0x0 StackChan-GPT-v1.8.6.bin
+esptool.py --chip esp32s3 -p /dev/cu.usbmodem* -b 460800 write_flash 0x0 StackChan-GPT-v1.8.7.bin
 ```
 
-Before flashing a merged image at `0x0`, make sure your microSD configuration backup is current. The image includes blank gaps over the NVS settings area. The binary contains no API key or Wi-Fi credentials. See [v1.8.6 build and validation notes](docs/WEB_SEARCH_v1.8.6.md).
+Before flashing a merged image at `0x0`, make sure your microSD configuration backup is current. The image includes blank gaps over the NVS settings area. The binary contains no API key or Wi-Fi credentials. See [v1.8.7 behavior and validation notes](docs/IDLE_CAMERA_TRACKING_v1.8.7.md).
 
-## Highlights (`v1.8.6`)
+## Highlights (`v1.8.7`)
+
+- **Deterministic idle camera tracking**: After 30 seconds at rest, StackChan checks the camera every 10 seconds for local pixel movement. If more than 10% of one quadrant changes, the head follows the movement toward the frame center at one-second intervals for no more than 30 seconds. This feature uses local frame differencing only. It does not call an AI model, upload an image, save a frame, or play the camera shutter sound.
 
 - **Live web search**: News, weather, current facts and public website lookups through OpenAI Responses `web_search`, called as needed by the selected chat or live voice model. Uses the existing API key; no additional server is required. Open the setup portal and select **Latest web search and source links** for citations.
 

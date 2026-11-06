@@ -36,6 +36,7 @@
 
 # Build files
 build/
+build-host/
 cmake-build-*/
 /components/
 managed_components/

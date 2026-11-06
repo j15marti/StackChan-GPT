@@ -8,7 +8,7 @@ public:
     using EspVideo::EspVideo;
 
     bool Capture() override;
-    bool StreamCaptures();
+    bool StreamCaptures(int discard_frames = 0);
 
     auto TryLockFrame()
     {

@@ -8,7 +8,7 @@ bool StackChanCamera::Capture()
     return EspVideo::Capture();
 }
 
-bool StackChanCamera::StreamCaptures()
+bool StackChanCamera::StreamCaptures(int discard_frames)
 {
-    return CaptureFrame(false, 0);
+    return CaptureFrame(false, discard_frames);
 }

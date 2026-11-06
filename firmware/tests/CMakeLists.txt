@@ -17,6 +17,19 @@ target_compile_features(motion_math_test PRIVATE cxx_std_17)
 
 add_test(NAME motion_math_test COMMAND $<TARGET_FILE:motion_math_test>)
 
+add_executable(idle_camera_motion_test
+    idle_camera_motion_test.cpp
+    ../main/hal/idle_camera_motion.cpp
+)
+
+target_include_directories(idle_camera_motion_test PRIVATE
+    ../main
+)
+
+target_compile_features(idle_camera_motion_test PRIVATE cxx_std_17)
+
+add_test(NAME idle_camera_motion_test COMMAND $<TARGET_FILE:idle_camera_motion_test>)
+
 set(CJSON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../managed_components/espressif__cjson/cJSON" CACHE PATH "Directory containing cJSON.c and cJSON.h")
 if(NOT EXISTS "${CJSON_DIR}/cJSON.c")
     message(FATAL_ERROR "Set CJSON_DIR to cJSON 1.7.19 source directory, or run idf.py reconfigure first")

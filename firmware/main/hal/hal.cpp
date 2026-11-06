@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 #include "hal.h"
+#include "idle_camera_tracker.h"
 #include "hal_openai.h"
 #include <memory>
 #include <mooncake_log.h>
@@ -201,6 +202,7 @@ void Hal::startXiaozhi()
 
     // Start stackchan update task
     xTaskCreatePinnedToCore(_stackchan_update_task, "stackchan", 4096, NULL, 3, NULL, 1);
+    start_idle_camera_tracker();
 
     hal_bridge::start_xiaozhi_app();
 }

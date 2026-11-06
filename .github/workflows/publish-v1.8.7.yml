@@ -1,0 +1,92 @@
+name: Publish StackChan-GPT v1.8.7
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .release/v1.8.7/**
+      - .github/workflows/publish-v1.8.7.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-stackchan-v1.8.7
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'j15marti/StackChan-GPT'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct and verify merged firmware
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .release/v1.8.7/chunk-* > StackChan-GPT-v1.8.7.bin
+          test "$(stat -c %s StackChan-GPT-v1.8.7.bin)" = "12857054"
+          sha256sum --check StackChan-GPT-v1.8.7.sha256
+
+      - name: Commit the merged firmware image
+        id: firmware_commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -r .release/v1.8.7
+          git rm .github/workflows/publish-v1.8.7.yml
+          git rm StackChan-GPT-v1.8.6.bin StackChan-GPT-v1.8.6.sha256
+          git add StackChan-GPT-v1.8.7.bin StackChan-GPT-v1.8.7.sha256
+          git commit -m "Release v1.8.7: publish deterministic idle camera tracking"
+          git push origin HEAD:main
+          echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.firmware_commit.outputs.release_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
+          ## StackChan-GPT v1.8.7
+
+          Adds deterministic, fully local idle camera motion tracking for the CoreS3 camera and StackChan head servos.
+
+          ### Highlights
+
+          - Waits until StackChan has been at rest for 30 seconds, then checks for movement every 10 seconds.
+          - Compares raw luma frames locally with fixed thresholds. No AI model is used, no image is uploaded, and no frame is saved.
+          - Starts tracking only when strictly more than 10% of the pixels in one quadrant change.
+          - Rechecks movement at approximately one-second intervals and steers the changed-pixel centroid toward the frame center.
+          - Stops after no more than 30 seconds and cancels when listening, speaking, playback, touch, or another motion modifier begins.
+          - Compensates for uniform brightness changes and flushes stale camera frames after servo motion.
+
+          ### Validation
+
+          - All 3 host test targets passed.
+          - The complete ESP-IDF 6.1 ESP32-S3 firmware build passed.
+          - The application image checksum and validation hash passed.
+          - The merged firmware checksum was independently verified before publication.
+          - Physical camera sensitivity, servo direction, and interaction timing still require validation on a StackChan unit.
+
+          ### Flashing
+
+          Flash `StackChan-GPT-v1.8.7.bin` at address `0x0` on the 16 MB ESP32-S3 StackChan. Back up settings to microSD first because the merged image overwrites the NVS settings area.
+
+          SHA-256: `1720be5b9d7c483dbfea0ebfdc3a310f883bb4c55709abacf370010100dc69ea`
+          EOF
+          gh release create v1.8.7 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$RELEASE_SHA" \
+            --title "StackChan-GPT v1.8.7 - Deterministic Idle Camera Tracking" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
+            StackChan-GPT-v1.8.7.bin \
+            StackChan-GPT-v1.8.7.sha256

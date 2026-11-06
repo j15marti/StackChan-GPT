@@ -128,10 +128,45 @@ void Motion::setAutoAngleSyncEnabled(bool enabled)
 
 void Motion::setModifyLock(bool locked)
 {
-    _is_modify_locked = locked;
+    _is_modify_locked.store(locked);
 }
 
-bool Motion::isModifyLocked()
+bool Motion::isModifyLocked() const
 {
-    return _is_modify_locked;
+    return _is_modify_locked.load() || _idle_tracking_locked.load();
+}
+
+bool Motion::tryAcquireIdleTrackingLock()
+{
+    if (_is_modify_locked.load()) {
+        return false;
+    }
+
+    bool expected = false;
+    if (!_idle_tracking_locked.compare_exchange_strong(expected, true)) {
+        return false;
+    }
+
+    // Close the small race where an external modifier acquired its lock after
+    // the first check but before the tracking lock was set.
+    if (_is_modify_locked.load()) {
+        _idle_tracking_locked.store(false);
+        return false;
+    }
+    return true;
+}
+
+void Motion::releaseIdleTrackingLock()
+{
+    _idle_tracking_locked.store(false);
+}
+
+bool Motion::hasIdleTrackingLock() const
+{
+    return _idle_tracking_locked.load();
+}
+
+bool Motion::isExternallyModifyLocked() const
+{
+    return _is_modify_locked.load();
 }

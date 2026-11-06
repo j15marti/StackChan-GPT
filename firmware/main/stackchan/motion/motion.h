@@ -7,6 +7,7 @@
 #include "servo.h"
 #include <smooth_ui_toolkit.hpp>
 #include <uitk/short_namespace.hpp>
+#include <atomic>
 #include <memory>
 
 namespace stackchan::motion {
@@ -157,12 +158,20 @@ public:
     void setAutoAngleSyncEnabled(bool enabled);
 
     void setModifyLock(bool locked);
-    bool isModifyLocked();
+    bool isModifyLocked() const;
+
+    // Idle camera tracking uses its own lock so releasing it cannot clear a
+    // modifier lock owned by IMU or interaction code.
+    bool tryAcquireIdleTrackingLock();
+    void releaseIdleTrackingLock();
+    bool hasIdleTrackingLock() const;
+    bool isExternallyModifyLocked() const;
 
 private:
     std::unique_ptr<Servo> _yaw_servo;
     std::unique_ptr<Servo> _pitch_servo;
-    bool _is_modify_locked = false;
+    std::atomic<bool> _is_modify_locked{false};
+    std::atomic<bool> _idle_tracking_locked{false};
 };
 
 }  // namespace stackchan::motion
