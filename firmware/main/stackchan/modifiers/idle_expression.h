@@ -48,21 +48,12 @@ private:
     {
         int action = Random::getInstance().getInt(0, 100);
 
-        if (action < 70) {
-            // 【动作 1：眼神游离】双眼协同移动一个小范围
+        if (action < 80) {
+            // 【动作 1：眼神游离】双眼协同移动一个小范围（嘴巴保持静止）
             int offsetX = Random::getInstance().getInt(-20, 20);
             int offsetY = Random::getInstance().getInt(-15, 15);
             avatar.leftEye().setPosition({offsetX, offsetY});
             avatar.rightEye().setPosition({offsetX, offsetY});
-
-            // 嘴巴也配合动一下
-            avatar.mouth().setPosition({0, Random::getInstance().getInt(0, 10)});
-        } else if (action < 80) {
-            // 【动作 3：嘴巴歪一下】旋转角度
-            // Rotation: 0~3600
-            int rotation = Random::getInstance().getInt(-30, 30);
-            // 加上基准值
-            avatar.mouth().setRotation(rotation < 0 ? 3600 + rotation : rotation);
         } else {
             // 【动作 4：回归中性】
             reset_to_neutral(avatar);

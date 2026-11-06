@@ -1,3 +1,57 @@
+menu "Agent.ai (OpenAI Configuration)"
+
+config OPENAI_API_KEY
+    string "OpenAI API Key"
+    default ""
+    help
+        Default OpenAI API key used by the Agent.ai app on StackChan.
+        Can also be set or updated at runtime via SETUP -> Agent.ai -> OpenAI API
+        (QR Code / Web Portal) or via BLE config characteristic.
+
+config OPENAI_BASE_URL
+    string "OpenAI API Base URL"
+    default "https://api.openai.com/v1"
+    help
+        Base URL (no trailing slash) for OpenAI API requests.
+
+config OPENAI_CHAT_MODEL
+    string "OpenAI Chat Completion Model"
+    default "gpt-4o-mini"
+    help
+        Chat model used for Agent.ai responses and servo/LED tool calling.
+
+config OPENAI_STT_MODEL
+    string "OpenAI Speech-to-Text Model"
+    default "whisper-1"
+    help
+        Model used for /v1/audio/transcriptions.
+
+config OPENAI_TTS_MODEL
+    string "OpenAI Text-to-Speech Model"
+    default "tts-1"
+    help
+        Model used for /v1/audio/speech.
+
+config OPENAI_TTS_VOICE
+    string "OpenAI TTS Voice"
+    default "nova"
+    help
+        Voice used for /v1/audio/speech (nova, alloy, shimmer, echo, fable, onyx, coral, ash, sage).
+
+config OPENAI_WIFI_SSID
+    string "Default 2.4GHz Wi-Fi SSID (Optional)"
+    default ""
+    help
+        Optional default 2.4GHz Wi-Fi SSID to register automatically on boot.
+
+config OPENAI_WIFI_PASSWORD
+    string "Default 2.4GHz Wi-Fi Password (Optional)"
+    default ""
+    help
+        Optional default 2.4GHz Wi-Fi password to register automatically on boot.
+
+endmenu
+
 menu "StackChan Server"
 
 config STACKCHAN_SERVER_URL

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 #include "hal.h"
+#include "hal_openai.h"
 #include <memory>
 #include <mooncake_log.h>
 #include <nvs_flash.h>
@@ -33,6 +34,7 @@ void Hal::init()
     ESP_ERROR_CHECK(ret);
 
     xiaozhi_board_init();
+    hal_openai::apply_boot_defaults();
     xiaozhi_mcp_init();
     head_touch_init();
     io_expander_init();
@@ -154,9 +156,10 @@ static void _stackchan_update_task(void* param)
         LvglLockGuard lock;
 
         if (!hal_bridge::is_xiaozhi_idle()) {
-            vTaskDelay(pdMS_TO_TICKS(100));
+            vTaskDelay(pdMS_TO_TICKS(10));
         }
 
+        hal_openai::update_thinking_heartbeat_leds();
         GetStackChan().update();
 
         if (!hal_bridge::is_xiaozhi_ready()) {

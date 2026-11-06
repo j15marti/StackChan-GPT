@@ -308,6 +308,7 @@ idf_component_register(SRCS ${SOURCES}
                         esp_psram
                         esp_netif
                         esp_http_client
+                        esp_http_server
                         mbedtls
                         espressif__cjson
                         esp_eth
@@ -316,6 +317,8 @@ idf_component_register(SRCS ${SOURCES}
                         esp_driver_gpio
                         esp_driver_uart
                         esp_driver_spi
+                        esp_driver_sdspi
+                        sdmmc
                         esp_driver_i2c
                         esp_driver_i2s
                         esp_driver_jpeg

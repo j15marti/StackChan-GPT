@@ -1,34 +1,91 @@
+# StackChan-GPT Firmware (`Agent.ai` + OpenAI API)
 
-## Build
+Modified M5Stack **StackChan** firmware (`ESP32-S3` / `M5Stack CoreS3`) that replaces the original cloud-bound AI backend with a **direct, on-device OpenAI API integration** (`Whisper STT` + `Chat Completions with Function/Tool Calling` + `OpenAI Opus Streaming TTS` + `OpenAI Vision`), while preserving compatibility with the **StackChan World** iOS app, Feetech SCS **servo motors**, and **12 RGB neon LEDs**.
 
-### Fetch Dependencies
+---
 
+## Key Features
+
+1. **`Agent.ai` Launcher App**:
+   - The main launcher app and settings menu are updated to **`Agent.ai`**.
+   - Opening **`Agent.ai`** launches the OpenAI voice assistant directly on the device (`OpenaiProtocol`).
+   - **No original AI server login/activation**: Bypasses `api.tenclass.net` / M5Stack cloud AI binding completely.
+2. **Full OpenAI Voice & Response Pipeline**:
+   - **Wake Word & Tap-to-Talk**: Say `"Hi StackChan"` (ESP-SR WakeNet9) or tap StackChan's face to start talking.
+   - **Speech-to-Text (`POST /v1/audio/transcriptions`)**: Captures 16 kHz, 16-bit mono PCM from the 4-mic array (`ES7210`) with hardware AFE beamforming, echo cancellation, and VAD, and sends WAV audio to OpenAI (`whisper-1` / `gpt-4o-mini-transcribe`).
+   - **Chat Completions + Tool Calling (`POST /v1/chat/completions`)**: Sends conversation history and all hardware MCP tools to OpenAI (`gpt-4o-mini` / `gpt-4o`).
+   - **Streaming Text-to-Speech (`POST /v1/audio/speech`)**: Streams `opus` audio from OpenAI TTS (`tts-1`, voice `nova`/`alloy`/`shimmer`/`echo`/`fable`/`onyx`/`coral`/`ash`/`sage`) through `OggDemuxer` directly to the `AW88298` speaker.
+3. **Servo Motors, Facial Expressions & RGB LED Integration**:
+   - **Automatic State Feedback**:
+     - **Listening**: All 12 RGB LEDs glow emerald green (`0, 75, 25`) and the pitch servo tilts up attentively.
+     - **Thinking**: RGB LEDs glow purple (`50, 15, 85`) with a `"Thinking..."` speech bubble and doubtful expression.
+     - **Speaking**: RGB LEDs glow ocean cyan/blue (`0, 45, 95`), `SpeakingModifier` animates the mouth and performs natural speaking nods/yaw movements, and emotion tags (`[happy]`, `[laughing]`, `[sad]`, `[angry]`, `[doubtful]`, `[sleepy]`, `[neutral]`) drive facial decorators and servo postures.
+   - **OpenAI Function Calling Tools**:
+     - `self.robot.set_head_angles` / `self.robot.get_head_angles`: Move yaw (`-128°` to `128°`) and pitch (`0°` to `90°`) servos at custom speeds.
+     - `self.robot.perform_gesture`: Trigger multi-keyframe animations (`nod`, `shake`, `happy_dance`, `robot_dance`, `look_around`, `panic`, `center`).
+     - `self.robot.set_led_color` / `self.robot.set_led_side_color`: Set all 12 RGB LEDs or left/right 6-LED strips independently (`0-168` per channel). Custom LED colors set by the AI are preserved across states until turned off (`0, 0, 0`).
+     - `self.robot.set_emotion`: Change facial emotion on screen.
+     - `self.camera.take_photo`: Captures a JPEG photo from the CoreS3 GC0308 camera and analyzes it with OpenAI Vision (`gpt-4o-mini` / `gpt-4o`).
+     - `self.robot.create_reminder` / `get_reminders` / `stop_reminder`, `self.audio_speaker.set_volume`, `self.screen.set_brightness`.
+4. **StackChan World iOS App Compatibility**:
+   - Keeps the NimBLE GATT services (`e2e5e5ff-1234-5678-1234-56789abcdef0` for Wi-Fi provisioning and `e2e5e5e0-1234-5678-1234-56789abcdef0` for Motion/Avatar/RGB control) and LAN WebSocket Avatar protocol intact.
+
+---
+
+## Connecting Your OpenAI API Key (3 Explicit Methods)
+
+### Method 1: On-Device Touchscreen + Local Web Portal (No Reflash Required)
+1. Connect StackChan to 2.4 GHz Wi-Fi (via the **StackChan World** iOS app over Bluetooth in `SETUP -> Wi-Fi -> Change Wi-Fi`, or via `main/openai_config.h`).
+2. On StackChan's touchscreen, swipe to **`SETUP`** -> **`Agent.ai`** -> **`OpenAI API`**.
+3. StackChan starts a local web server and displays a **QR Code** and URL (`http://<stackchan-ip>/`).
+4. Scan the QR code with your iPhone or open `http://<stackchan-ip>/` in any browser on the same Wi-Fi network.
+5. Paste your OpenAI API key (`sk-...`), choose your Chat Model (`gpt-4o-mini`, `gpt-4o`, etc.) and TTS Voice (`nova`, `alloy`, `shimmer`, `echo`, `fable`, `onyx`, `coral`, `ash`, `sage`), and click **Save OpenAI Configuration**.
+   - You can also tap **Voice** and **Model** directly on StackChan's touchscreen in `SETUP -> Agent.ai -> OpenAI API`, or click **Test Servos & RGB LEDs** in the web portal to verify hardware motion and lighting immediately.
+
+### Method 2: Compile-Time Configuration (`main/openai_config.h`)
+Edit `firmware/main/openai_config.h` before building:
+```cpp
+#define OPENAI_API_KEY_DEFAULT       "sk-proj-YOUR_OPENAI_API_KEY"
+#define OPENAI_BASE_URL_DEFAULT      "https://api.openai.com/v1"
+#define OPENAI_CHAT_MODEL_DEFAULT    "gpt-4o-mini"
+#define OPENAI_TTS_MODEL_DEFAULT     "tts-1"
+#define OPENAI_TTS_VOICE_DEFAULT     "nova"
+#define OPENAI_STT_MODEL_DEFAULT     "whisper-1"
+#define OPENAI_WIFI_SSID_DEFAULT     "Your_2.4GHz_WiFi_SSID"
+#define OPENAI_WIFI_PASSWORD_DEFAULT "Your_WiFi_Password"
+```
+
+### Method 3: Bluetooth Low Energy (BLE)
+Write a JSON command to BLE Characteristic `e2e5e5e3-1234-5678-1234-56789abcdef0`:
+```json
+{
+  "cmd": "setOpenAI",
+  "data": {
+    "apiKey": "sk-proj-YOUR_OPENAI_API_KEY",
+    "model": "gpt-4o-mini",
+    "voice": "nova",
+    "baseUrl": "https://api.openai.com/v1"
+  }
+}
+```
+
+---
+
+## Build & Flash Instructions
+
+### 1. Fetch Dependencies
 ```bash
+cd ~/Code/StackChan-GPT/firmware
 python3 ./fetch_repos.py
 ```
 
-### Tool Chains
-
-[ESP-IDF v6.1](https://docs.espressif.com/projects/esp-idf/en/v6.1/esp32s3/index.html)
-
-### Build
-
+### 2. Activate ESP-IDF v6.1 & Build
 ```bash
+source ~/esp-idf/export.sh
 idf.py build
 ```
 
-### Host-side tests
-
-The motion coordinate helpers can be tested without ESP-IDF hardware:
-
+### 3. Flash & Monitor
 ```bash
-cmake -S tests -B build-host-tests
-cmake --build build-host-tests
-ctest --test-dir build-host-tests --output-on-failure
-```
-
-### Flash
-
-```bash
-idf.py flash
+idf.py -p /dev/cu.usbmodem* flash monitor
 ```

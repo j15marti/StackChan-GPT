@@ -39,6 +39,15 @@
 #define DISPLAY_BACKLIGHT_PIN GPIO_NUM_NC
 #define DISPLAY_BACKLIGHT_OUTPUT_INVERT true
 
+/* LCD and microSD share SPI3. GPIO35 is both LCD D/C (output) and SD MISO (input). */
+#define LCD_SPI_SCLK_PIN GPIO_NUM_36
+#define LCD_SPI_MOSI_PIN GPIO_NUM_37
+#define LCD_SPI_CS_PIN   GPIO_NUM_3
+#define LCD_DC_PIN       GPIO_NUM_35
+#define SD_SPI_MISO_PIN  GPIO_NUM_35
+#define SD_SPI_CS_PIN    GPIO_NUM_4
+#define SD_MOUNT_POINT   "/sdcard"
+
 
 
 /* Camera pins */

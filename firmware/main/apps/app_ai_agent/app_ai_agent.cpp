@@ -18,7 +18,7 @@ using namespace smooth_ui_toolkit::lvgl_cpp;
 AppAiAgent::AppAiAgent()
 {
     // Configure App name
-    setAppInfo().name = "AI.AGENT";
+    setAppInfo().name = "Agent.ai";
     // Configure App icon
     static auto icon  = assets::get_image("icon_ai_agent.bin");
     setAppInfo().icon = (void*)&icon;

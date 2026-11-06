@@ -1,0 +1,15 @@
+# Copy this file to `sdkconfig.defaults.local` (which is git-ignored and
+# automatically loaded by CMake) or edit `main/openai_config.h` directly.
+#
+# Alternatively, you can configure your OpenAI API key at runtime without
+# reflashing via `SETUP -> Agent.ai -> OpenAI API` (QR Code / Web Portal)
+# or via Bluetooth (BLE Config Characteristic).
+
+# CONFIG_OPENAI_API_KEY="sk-proj-..."
+# CONFIG_OPENAI_BASE_URL="https://api.openai.com/v1"
+# CONFIG_OPENAI_CHAT_MODEL="gpt-4o-mini"
+# CONFIG_OPENAI_TTS_MODEL="tts-1"
+# CONFIG_OPENAI_TTS_VOICE="nova"
+# CONFIG_OPENAI_STT_MODEL="whisper-1"
+# CONFIG_OPENAI_WIFI_SSID="Your2.4GHzWiFiSSID"
+# CONFIG_OPENAI_WIFI_PASSWORD="YourWiFiPassword"

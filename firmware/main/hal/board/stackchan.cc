@@ -12,11 +12,18 @@
 #include <esp_log.h>
 #include <driver/i2c_master.h>
 #include <wifi_station.h>
+#include <ssid_manager.h>
 #include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
 #include <esp_lcd_ili9341.h>
 #include <esp_timer.h>
+#include <esp_lvgl_port.h>
+#include <esp_vfs_fat.h>
+#include <driver/sdspi_host.h>
+#include <esp_rom_gpio.h>
+#include <soc/spi_periph.h>
 #include <algorithm>
+#include <functional>
 #include <mutex>
 #include "stackchan_camera.h"
 #include "hal_bridge.h"
@@ -357,6 +364,8 @@ private:
     Aw9523* aw9523_;
     Ft6336* ft6336_;
     LvglDisplay* display_;
+    esp_lcd_panel_io_handle_t lcd_panel_io_ = nullptr;
+    std::mutex sd_mutex_;
     StackChanCamera* camera_;
     esp_timer_handle_t touchpad_timer_;
     PowerSaveTimer* power_save_timer_;
@@ -564,15 +573,83 @@ private:
 
     void InitializeSpi()
     {
+        // Keep the microSD card deselected so it never answers LCD traffic.
+        DeselectSdCard();
+
+        // MISO stays unassigned here because GPIO35 is the LCD D/C line; it is
+        // routed to SPI3 MISO only for the duration of an SD card session.
         spi_bus_config_t buscfg = {};
-        buscfg.mosi_io_num      = GPIO_NUM_37;
+        buscfg.mosi_io_num      = LCD_SPI_MOSI_PIN;
         buscfg.miso_io_num      = GPIO_NUM_NC;
-        buscfg.sclk_io_num      = GPIO_NUM_36;
+        buscfg.sclk_io_num      = LCD_SPI_SCLK_PIN;
         buscfg.quadwp_io_num    = GPIO_NUM_NC;
         buscfg.quadhd_io_num    = GPIO_NUM_NC;
         buscfg.max_transfer_sz  = DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(uint16_t);
         ESP_ERROR_CHECK(spi_bus_initialize(SPI3_HOST, &buscfg, SPI_DMA_CH_AUTO));
     }
+
+    static void DeselectSdCard()
+    {
+        gpio_set_direction(SD_SPI_CS_PIN, GPIO_MODE_OUTPUT);
+        gpio_set_pull_mode(SD_SPI_CS_PIN, GPIO_PULLUP_ONLY);
+        gpio_set_level(SD_SPI_CS_PIN, 1);
+    }
+
+public:
+    // Mounts the microSD card at SD_MOUNT_POINT, runs fn, then unmounts.
+    // Returns false (without calling fn) when no card can be mounted.
+    bool WithSdCard(const std::function<void(const char* mount_point)>& fn)
+    {
+        std::lock_guard<std::mutex> sd_lock(sd_mutex_);
+
+        // While GPIO35 acts as MISO the LCD cannot drive D/C, so block LVGL
+        // flushes and drain any queued LCD transfers before switching it.
+        if (!lvgl_port_lock(5000)) {
+            ESP_LOGW(TAG, "SD card: LVGL lock timeout, skipping");
+            return false;
+        }
+        if (lcd_panel_io_) {
+            esp_lcd_panel_io_tx_param(lcd_panel_io_, 0x00 /* NOP */, nullptr, 0);
+        }
+
+        gpio_output_disable(SD_SPI_MISO_PIN);
+        gpio_input_enable(SD_SPI_MISO_PIN);
+        gpio_pullup_en(SD_SPI_MISO_PIN);
+        esp_rom_gpio_connect_in_signal(SD_SPI_MISO_PIN, spi_periph_signal[SPI3_HOST].spiq_in, false);
+
+        sdmmc_host_t host  = SDSPI_HOST_DEFAULT();
+        host.slot          = SPI3_HOST;
+        host.max_freq_khz  = SDMMC_FREQ_DEFAULT;
+
+        sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+        slot_config.host_id               = SPI3_HOST;
+        slot_config.gpio_cs               = SD_SPI_CS_PIN;
+
+        esp_vfs_fat_sdmmc_mount_config_t mount_config = {};
+        mount_config.format_if_mount_failed           = false;
+        mount_config.max_files                        = 2;
+        mount_config.allocation_unit_size             = 16 * 1024;
+
+        sdmmc_card_t* card = nullptr;
+        esp_err_t err      = esp_vfs_fat_sdspi_mount(SD_MOUNT_POINT, &host, &slot_config, &mount_config, &card);
+        const bool mounted = err == ESP_OK;
+        if (mounted) {
+            ESP_LOGI(TAG, "SD card mounted at %s", SD_MOUNT_POINT);
+            fn(SD_MOUNT_POINT);
+            esp_vfs_fat_sdcard_unmount(SD_MOUNT_POINT, card);
+        } else {
+            ESP_LOGI(TAG, "No usable SD card (%s)", esp_err_to_name(err));
+        }
+
+        DeselectSdCard();
+        gpio_pullup_dis(SD_SPI_MISO_PIN);
+        gpio_set_direction(SD_SPI_MISO_PIN, GPIO_MODE_OUTPUT);
+
+        lvgl_port_unlock();
+        return mounted;
+    }
+
+private:
 
     void InitializeIli9342Display()
     {
@@ -583,14 +660,15 @@ private:
 
         ESP_LOGD(TAG, "Install panel IO");
         esp_lcd_panel_io_spi_config_t io_config = {};
-        io_config.cs_gpio_num                   = GPIO_NUM_3;
-        io_config.dc_gpio_num                   = GPIO_NUM_35;
+        io_config.cs_gpio_num                   = LCD_SPI_CS_PIN;
+        io_config.dc_gpio_num                   = LCD_DC_PIN;
         io_config.spi_mode                      = 2;
         io_config.pclk_hz                       = 40 * 1000 * 1000;
         io_config.trans_queue_depth             = 10;
         io_config.lcd_cmd_bits                  = 8;
         io_config.lcd_param_bits                = 8;
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(SPI3_HOST, &io_config, &panel_io));
+        lcd_panel_io_ = panel_io;
 
         ESP_LOGD(TAG, "Install LCD driver");
         esp_lcd_panel_dev_config_t panel_config = {};
@@ -694,6 +772,11 @@ public:
     // the same BLE App setup flow. Never start the upstream configuration AP.
     void StartWifiConfigMode() override
     {
+        if (!SsidManager::GetInstance().GetSsidList().empty()) {
+            ESP_LOGW(TAG, "WiFi connection timed out; retrying saved SSID instead of entering pairing mode");
+            TryWifiConnect();
+            return;
+        }
         ESP_LOGW(TAG, "WiFi setup required; opening StackChan App setup");
         GetHAL().requestAppSetup();
     }
@@ -756,6 +839,12 @@ i2c_master_bus_handle_t hal_bridge::board_get_i2c_bus()
 {
     auto& board = (M5StackCoreS3Board&)Board::GetInstance();
     return board.GetI2cBus();
+}
+
+bool hal_bridge::board_sd_card_session(const std::function<void(const char* mount_point)>& fn)
+{
+    auto& board = (M5StackCoreS3Board&)Board::GetInstance();
+    return board.WithSdCard(fn);
 }
 
 StackChanCamera* hal_bridge::board_get_camera()
@@ -833,11 +922,11 @@ void hal_bridge::board_set_speaker_volume(uint8_t volume, bool permanent)
 
 uint8_t hal_bridge::board_get_speaker_volume()
 {
-    int volume = 70;
+    int volume = 95;
     Settings settings("audio", false);
     volume = settings.GetInt("output_volume", volume);
     if (volume <= 0) {
-        volume = 10;
+        volume = 95;
     }
     return volume;
 }

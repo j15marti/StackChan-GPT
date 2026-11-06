@@ -1,0 +1,316 @@
+StackChan-GPT third-party notices
+=================================
+
+This file lists third-party software used by the StackChan-GPT firmware and
+the licenses actually present in this tree (cloned dependency repos and
+ESP-IDF managed_components). Copyright lines are copied from those LICENSE
+files, or noted as missing when the LICENSE file has none.
+
+StackChan-GPT original modifications and the upstream M5Stack StackChan
+firmware are MIT. See LICENSE (this repository) and firmware/LICENSE
+(upstream M5Stack text).
+
+OpenAI is not a licensed component of this firmware. Users provide their own
+API key and use OpenAI’s service under OpenAI’s terms. This project is not
+affiliated with or endorsed by OpenAI.
+
+
+1. Upstream firmware and cloned dependencies
+--------------------------------------------
+
+M5Stack StackChan
+  Path: firmware/LICENSE (and this repository as a whole)
+  License: MIT
+  Copyright (c) 2026 M5Stack Technology CO LTD
+  Source: https://github.com/m5stack/StackChan
+
+xiaozhi-esp32 (78/xiaozhi-esp32)
+  Path: firmware/xiaozhi-esp32/LICENSE
+  License: MIT
+  Copyright (c) 2025 Shenzhen Xinzhi Future Technology Co., Ltd.
+  Copyright (c) 2025 Project Contributors
+  Source: https://github.com/78/xiaozhi-esp32
+  Bundled gifdec (firmware/xiaozhi-esp32/main/display/lvgl_display/gif/LICENSE.txt):
+    "All of the source code and documentation for gifdec is released into the
+    public domain and provided without warranty of any kind."
+
+Mooncake
+  Path: firmware/components/mooncake/LICENSE
+  License: MIT
+  Copyright (c) 2023 Forairaaaaa
+  Source: https://github.com/Forairaaaaa/mooncake.git
+
+mooncake_log
+  Path: firmware/components/mooncake_log/LICENSE
+  License: MIT
+  Copyright (c) 2024 海底撩
+  Source: https://github.com/Forairaaaaa/mooncake_log.git
+
+smooth_ui_toolkit
+  Path: firmware/components/smooth_ui_toolkit/LICENSE
+  License: MIT
+  Copyright (c) 2023 Forairaaaaa
+  Source: https://github.com/Forairaaaaa/smooth_ui_toolkit.git
+
+ArduinoJson
+  Path: firmware/components/ArduinoJson/LICENSE.txt
+  License: MIT
+  Copyright © 2014-2025, Benoit BLANCHON
+  Source: https://github.com/bblanchon/ArduinoJson.git
+
+esp-now
+  Path: firmware/components/esp-now/LICENSE
+  License: Apache License 2.0
+  The LICENSE file is the Apache 2.0 legal text and does not name a
+  copyright holder. Source headers in this component include
+  SPDX-FileCopyrightText: Espressif Systems (Shanghai) CO LTD.
+  Source: https://github.com/espressif/esp-now.git
+
+
+2. Drivers vendored in firmware/main
+------------------------------------
+
+FTServo_Arduino (FEETECH BUS Servo)
+  Path: firmware/main/hal/drivers/FTServo_Arduino/LICENSE
+  License: MIT
+  Copyright (c) 2024 ftservo
+
+BMI270 SensorAPI
+  Path: firmware/main/hal/drivers/bmi270/BMI270_SensorAPI/LICENSE
+  License: BSD-3-Clause
+  Copyright (c) 2023 Bosch Sensortec GmbH. All rights reserved.
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+
+  1. Redistributions of source code must retain the above copyright
+     notice, this list of conditions and the following disclaimer.
+
+  2. Redistributions in binary form must reproduce the above copyright
+     notice, this list of conditions and the following disclaimer in the
+     documentation and/or other materials provided with the distribution.
+
+  3. Neither the name of the copyright holder nor the names of its
+     contributors may be used to endorse or promote products derived from
+     this software without specific prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+  COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+  STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
+  IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  POSSIBILITY OF SUCH DAMAGE.
+
+
+3. ESP-IDF (build SDK; not vendored in this git tree)
+-----------------------------------------------------
+
+ESP-IDF is required to build the firmware (idf_component.yml: >=6.1.0,<6.2.0).
+The LICENSE file in a local ESP-IDF checkout is Apache License 2.0. That
+LICENSE file does not name a copyright holder. ESP-IDF source headers in the
+local SDK include SPDX-FileCopyrightText: Espressif Systems (Shanghai) CO LTD.
+ESP-IDF is not copied into this repository.
+
+
+4. LVGL
+-------
+
+lvgl/lvgl
+  Path: firmware/managed_components/lvgl__lvgl/LICENCE.txt
+  License: MIT
+  Copyright (c) 2025 LVGL Kft
+  LVGL also documents additional third-party libraries in COPYRIGHTS.md
+  (FreeType, LodePNG, LZ4, ThorVG, and others). Those licenses live under
+  lvgl__lvgl/src/libs/ and related paths in the fetched component.
+
+
+5. ESP-SR / WakeNet (Espressif MIT, chip-restricted)
+----------------------------------------------------
+
+espressif/esp-sr (includes WakeNet wake-word models and related binaries)
+  Path: firmware/managed_components/espressif__esp-sr/LICENSE
+  License: ESPRESSIF MIT License (not OSI MIT)
+  Copyright (c) 2018 <ESPRESSIF SYSTEMS (SHANGHAI) PTE LTD>
+
+  Permission is hereby granted for use on all ESPRESSIF SYSTEMS products,
+  in which case, it is free of charge, to any person obtaining a copy of
+  this software and associated documentation files (the "Software"), to
+  deal in the Software without restriction, including without limitation
+  the rights to use, copy, modify, merge, publish, distribute, sublicense,
+  and/or sell copies of the Software, and to permit persons to whom the
+  Software is furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included
+  in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+  THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+  DEALINGS IN THE SOFTWARE.
+
+The same ESPRESSIF MIT License text (chip-restricted) also appears in:
+
+  espressif/esp_image_effects
+    Copyright (c) 2025 <ESPRESSIF SYSTEMS (SHANGHAI) CO.，LTD>
+  espressif/esp_new_jpeg
+    Copyright (c) 2024 <ESPRESSIF SYSTEMS (SHANGHAI) CO.，LTD>
+  espressif/esp_video
+    Copyright (c) 2024 <ESPRESSIF SYSTEMS (SHANGHAI) PTE LTD>
+
+
+6. Espressif Modified MIT (Espressif products only)
+---------------------------------------------------
+
+The following components ship "Espressif Modified MIT License" text. It is
+not OSI MIT. Redistribution for use with non-Espressif products is prohibited.
+
+  espressif/esp_audio_codec
+    Copyright (c) 2025 Espressif Systems (Shanghai) CO., LTD
+  espressif/esp_audio_effects
+    Copyright (c) 2025 Espressif Systems (Shanghai) CO., LTD
+  espressif/gmf_fft
+    Copyright (c) 2026 Espressif Systems (Shanghai) CO., LTD
+
+  Permission is hereby granted for use EXCLUSIVELY with Espressif Systems
+  products. This includes the right to use, copy, modify, merge, publish,
+  distribute, and sublicense the Software, subject to the following
+  conditions:
+
+  1. This Software MUST BE USED IN CONJUNCTION WITH ESPRESSIF SYSTEMS PRODUCTS.
+  2. The above copyright notice and this permission notice shall be included
+     in all copies or substantial portions of the Software.
+  3. Redistribution of the Software in source or binary form FOR USE WITH
+     NON-ESPRESSIF PRODUCTS is strictly prohibited.
+
+  SPDX-License-Identifier: LicenseRef-Espressif-Modified-MIT
+
+
+7. Other MIT components (LICENSE file present)
+----------------------------------------------
+
+cJSON (espressif/cjson)
+  Path: firmware/managed_components/espressif__cjson/LICENSE
+  License: MIT (file is the MIT permission text; it is not titled "MIT License")
+  Copyright (c) 2009-2017 Dave Gamble and cJSON contributors
+
+78/esp-wifi-connect
+  License: MIT
+  Copyright (c) 2024 Terrence
+
+txp666/otto-emoji-gif-component
+  License: MIT
+  Copyright (c) 2025 小鹏
+
+tny-robotics/sh1106-esp-idf
+  License: MIT
+  Copyright (c) 2025 TNY Robotics
+
+
+8. Apache License 2.0 components (LICENSE file present)
+-------------------------------------------------------
+
+Unless noted, each component’s LICENSE or LICENSE.txt is the Apache License
+2.0 legal text and does not name a copyright holder in that file. Where
+source headers were checked, SPDX-FileCopyrightText typically names
+Espressif Systems (Shanghai) CO LTD.
+
+  78/esp-ml307 — Apache-2.0 LICENSE present; no copyright holder in that
+    LICENSE file and no SPDX-FileCopyrightText found in its sources
+  78/uart-eth-modem — Apache-2.0 LICENSE present; no copyright holder in
+    that LICENSE file and no SPDX-FileCopyrightText found in its sources
+  78/esp_lcd_nv3023 — Apache-2.0 LICENSE.txt present
+
+  espressif/adc_battery_estimation
+  espressif/adc_mic
+  espressif/bmi270_sensor
+  espressif/button
+  espressif/cmake_utilities
+  espressif/esp-dsp
+  espressif/esp32-camera
+  espressif/esp_cam_sensor
+  espressif/esp_codec_dev
+  espressif/esp_io_expander
+  espressif/esp_io_expander_tca9554
+  espressif/esp_io_expander_tca95xx_16bit
+  espressif/esp_jpeg
+  espressif/esp_lcd_axs15231b
+  espressif/esp_lcd_co5300
+  espressif/esp_lcd_gc9a01
+  espressif/esp_lcd_ili9341
+  espressif/esp_lcd_panel_io_additions
+  espressif/esp_lcd_spd2010
+  espressif/esp_lcd_st7701
+  espressif/esp_lcd_st77916
+  espressif/esp_lcd_st7796
+  espressif/esp_lcd_touch
+  espressif/esp_lcd_touch_cst816s
+  espressif/esp_lcd_touch_ft5x06
+  espressif/esp_lcd_touch_gt1151
+  espressif/esp_lcd_touch_gt911
+  espressif/esp_lcd_touch_st7123
+  espressif/esp_lvgl_port
+  espressif/esp_mmap_assets
+  espressif/esp_sccb_intf
+  espressif/i2c_bus
+  espressif/iot_eth
+  espressif/iot_usbh_cdc
+  espressif/iot_usbh_rndis
+  espressif/knob
+  espressif/led_strip
+  espressif/mqtt
+  espressif/usb
+  espressif/usb_host_uvc
+  espressif2022/image_player
+
+  waveshare/custom_io_expander_ch32v003
+  waveshare/esp_lcd_sh8601
+  waveshare/esp_lcd_touch_cst9217
+
+  wvirgil123/sscma_client — Apache-2.0 LICENSE.txt present; no copyright
+    holder in that LICENSE file and no SPDX-FileCopyrightText found in the
+    first sources inspected
+
+The Apache License 2.0 text is not duplicated for each component. The
+canonical text is at http://www.apache.org/licenses/LICENSE-2.0 and in each
+component LICENSE file under firmware/managed_components/ (fetched at build
+time; that directory is gitignored).
+
+
+9. Components with no LICENSE file in this tree
+-----------------------------------------------
+
+These declare a license in idf_component.yml only. No LICENSE / COPYING /
+NOTICE file was present in the fetched component directory.
+
+  78/uart-uhci
+    idf_component.yml: license: Apache-2.0
+    No LICENSE file found.
+
+  78/xiaozhi-fonts (Noto text / emoji / Material Symbols assets)
+    idf_component.yml: license: Apache-2.0
+    No LICENSE file found. Underlying Google Noto font licenses were not
+    present in the fetched component, so they are not confirmed here.
+
+  espressif/dl_fft
+    idf_component.yml: license: MIT
+    No LICENSE file found. No copyright holder confirmed.
+
+
+10. Other trees in this repository
+----------------------------------
+
+server/LICENSE and remote/code/LICENSE are MIT with
+Copyright (c) 2026 M5Stack Technology CO LTD. They are part of the upstream
+M5Stack StackChan project, not StackChan-GPT firmware modifications.
+
+app/lib/model/XiaoZhi/License.dart is application source for a product-license
+data model, not a software copyright license file.

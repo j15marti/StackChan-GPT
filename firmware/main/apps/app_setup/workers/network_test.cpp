@@ -90,8 +90,8 @@ void NetworkTestWorker::update()
         _last_wifi = results.wifi;
         _wifi->setText(results.wifi);
     }
-    updateResult(*_xiaozhi, _last_xiaozhi, "Xiaozhi", results.xiaozhi);
-    updateResult(*_m5stack, _last_m5stack, "M5Stack", results.m5stack);
+    updateResult(*_xiaozhi, _last_xiaozhi, "OpenAI API", results.xiaozhi);
+    updateResult(*_m5stack, _last_m5stack, "Agent.ai Config", results.m5stack);
     if (results.running)
         _retry->addState(LV_STATE_DISABLED);
     else

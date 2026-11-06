@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 #include "hal.h"
+#include "hal_openai.h"
 #include "utils/bleprph/bleprph.h"
 #include "utils/secret_logic/secret_logic.h"
 #include <ArduinoJson.hpp>
@@ -357,6 +358,17 @@ public:
         network_diagnostics::finishWifiProvisioning();
     }
 
+    void connectDirect(const std::string& ssid, const std::string& password)
+    {
+        ArduinoJson::JsonDocument doc;
+        doc["cmd"]              = "setWifi";
+        doc["data"]["ssid"]     = ssid;
+        doc["data"]["password"] = password;
+        std::string json_str;
+        ArduinoJson::serializeJson(doc, json_str);
+        on_config_data(json_str.c_str());
+    }
+
     void init()
     {
         _config_connection = GetHAL().onBleConfigData.connect([this](const char* data) { on_config_data(data); });
@@ -472,7 +484,61 @@ private:
         } else if (doc["cmd"] == "handshake") {
             std::string data = doc["data"].as<std::string>();
             handle_handshake(data);
+        } else if (doc["cmd"] == "setOpenAI") {
+            handle_set_openai(doc["data"]);
+        } else if (doc["cmd"] == "getOpenAI") {
+            handle_get_openai();
         }
+    }
+
+    void handle_set_openai(ArduinoJson::JsonObject data)
+    {
+        auto cfg = hal_openai::get_config();
+        if (data["apiKey"].is<const char*>()) {
+            cfg.apiKey = data["apiKey"].as<std::string>();
+        }
+        if (data["baseUrl"].is<const char*>()) {
+            cfg.baseUrl = data["baseUrl"].as<std::string>();
+        }
+        if (data["model"].is<const char*>()) {
+            cfg.chatModel = data["model"].as<std::string>();
+        }
+        if (data["voice"].is<const char*>()) {
+            cfg.ttsVoice = data["voice"].as<std::string>();
+        }
+        if (data["sttModel"].is<const char*>()) {
+            cfg.sttModel = data["sttModel"].as<std::string>();
+        }
+        if (data["ttsModel"].is<const char*>()) {
+            cfg.ttsModel = data["ttsModel"].as<std::string>();
+        }
+        if (data["systemPrompt"].is<const char*>()) {
+            cfg.systemPrompt = data["systemPrompt"].as<std::string>();
+        }
+        if (data["wakeWord"].is<const char*>()) {
+            cfg.wakeWord = data["wakeWord"].as<std::string>();
+            hal_openai::set_wake_word(cfg.wakeWord);
+        }
+        hal_openai::set_config(cfg);
+        notify_state(10, "openaiConfigured");
+    }
+
+    void handle_get_openai()
+    {
+        auto cfg = hal_openai::get_config();
+        ArduinoJson::JsonDocument doc;
+        doc["cmd"]                  = "notifyOpenAI";
+        doc["data"]["maskedKey"]    = hal_openai::mask_api_key(cfg.apiKey);
+        doc["data"]["hasKey"]       = hal_openai::has_api_key();
+        doc["data"]["baseUrl"]      = cfg.baseUrl;
+        doc["data"]["model"]        = cfg.chatModel;
+        doc["data"]["voice"]        = cfg.ttsVoice;
+        doc["data"]["wakeWord"]     = cfg.wakeWord;
+        doc["data"]["webConfigUrl"] = hal_openai::get_web_config_url();
+        std::string json_str;
+        ArduinoJson::serializeJson(doc, json_str);
+        _sendFragmentedNotify(stackchan_ble_notify_config, json_str.c_str(), static_cast<uint16_t>(json_str.length()),
+                              "OpenAI notify");
     }
 
     void handle_get_wifi_status()
@@ -568,11 +634,14 @@ private:
     }
 };
 
+static WifiConfigServer* _active_wifi_config_server = nullptr;
+
 class AppConfigServerWorker : public mooncake::BasicAbility {
 public:
     void onCreate() override
     {
-        _server = std::make_unique<WifiConfigServer>();
+        _server                    = std::make_unique<WifiConfigServer>();
+        _active_wifi_config_server = _server.get();
         _server->init();
     }
 
@@ -587,6 +656,7 @@ public:
 
     void onDestroy() override
     {
+        _active_wifi_config_server = nullptr;
         _server.reset();
         _app_config_server_started = false;
     }
@@ -607,14 +677,27 @@ void Hal::startAppConfigServer()
     mooncake::GetMooncake().extensionManager()->createAbility(std::make_unique<AppConfigServerWorker>());
 }
 
+void Hal::connectWifiDirect(std::string_view ssid, std::string_view password)
+{
+    startAppConfigServer();
+    if (_active_wifi_config_server) {
+        _active_wifi_config_server->connectDirect(std::string(ssid), std::string(password));
+    }
+}
+
 bool Hal::isAppConfiged()
 {
     Settings settings("app_config", false);
     return settings.GetBool("is_configed", false);
 }
 
-void Hal::resetAppConfiged()
+void Hal::setAppConfiged(bool configured)
 {
     Settings settings("app_config", true);
-    settings.SetBool("is_configed", false);
+    settings.SetBool("is_configed", configured);
+}
+
+void Hal::resetAppConfiged()
+{
+    setAppConfiged(false);
 }

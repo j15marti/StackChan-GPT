@@ -118,7 +118,7 @@ struct XiaozhiConfig_t {
     uint32_t idleShutdownTimeSeconds = 600;
     bool allowShutdownWhenCharging   = false;
     uint8_t idleRandomMovementLevel  = 2;
-    bool startAiAgentOnBoot          = false;
+    bool startAiAgentOnBoot          = true;
 };
 
 /**
@@ -225,7 +225,9 @@ public:
     void startBleServer();
     bool isBleConnected();
     void startAppConfigServer();
+    void connectWifiDirect(std::string_view ssid, std::string_view password);
     bool isAppConfiged();
+    void setAppConfiged(bool configured = true);
     void resetAppConfiged();
 
     /* --------------------------------- HeadPet -------------------------------- */

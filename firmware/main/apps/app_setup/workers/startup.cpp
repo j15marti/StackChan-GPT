@@ -8,6 +8,7 @@
 #include <mooncake_log.h>
 #include <assets/assets.h>
 #include <hal/hal.h>
+#include <settings.h>
 
 using namespace smooth_ui_toolkit::lvgl_cpp;
 using namespace setup_workers;
@@ -63,7 +64,9 @@ void StartupWorker::update()
     // Startup page
     if (_page_startup) {
         if (_page_startup->isSkipClicked()) {
-            mclog::tagInfo(_tag, "startup skipped");
+            mclog::tagInfo(_tag, "startup skipped; marking app_config as configured");
+            Settings settings("app_config", true);
+            settings.SetBool("is_configed", true);
             _is_done = true;
         } else if (_page_startup->isStartClicked()) {
             _page_startup.reset();
@@ -85,8 +88,13 @@ void StartupWorker::update()
         _worker_wifi->update();
         if (_worker_wifi->isDone()) {
             _worker_wifi.reset();
-            mclog::tagInfo(_tag, "startup back");
-            _page_startup = std::make_unique<PageStartup>();
+            if (GetHAL().isAppConfiged()) {
+                mclog::tagInfo(_tag, "wifi/app setup finished or skipped; proceeding to launcher");
+                _is_done = true;
+            } else {
+                mclog::tagInfo(_tag, "startup back");
+                _page_startup = std::make_unique<PageStartup>();
+            }
         }
     }
 }

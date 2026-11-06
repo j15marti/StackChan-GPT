@@ -2,6 +2,7 @@
 #include "network_diagnostics.h"
 #include "../secret_logic/secret_logic.h"
 #include <hal/hal.h>
+#include <hal/hal_openai.h>
 #include <board.h>
 #include <settings.h>
 #include <system_info.h>
@@ -108,28 +109,18 @@ ServiceResult checkResponse(int status, const std::string& body, bool xiaozhi)
     if (!json || !cJSON_IsObject(json.get()))
         return {Status::Failed, "Server returned an invalid response. Check the server address or captive portal.",
                 status};
+    if (cJSON_IsArray(cJSON_GetObjectItem(json.get(), "data")) &&
+        cJSON_GetObjectItem(json.get(), "object") != nullptr) {
+        return {Status::Available, "OpenAI API connected & key verified", status};
+    }
     if (xiaozhi) {
         for (const auto* field : {"firmware", "activation", "server_time", "mqtt", "websocket"}) {
             if (cJSON_IsObject(cJSON_GetObjectItem(json.get(), field)))
                 return {Status::Available, "OTA/configuration service connected", status};
         }
-        return {Status::Failed, "Xiaozhi configuration response is missing service information.", status};
+        return {Status::Failed, "Configuration response is missing service information.", status};
     }
-    const auto* code = cJSON_GetObjectItem(json.get(), "code");
-    if (code && (!cJSON_IsNumber(code) || code->valuedouble != static_cast<double>(code->valueint)))
-        return {Status::Failed, "Device API returned an invalid business code.", status};
-    if (cJSON_IsNumber(code) && code->valueint != 0) {
-        return {Status::Reachable,
-                "Device API reached; request rejected (code " + std::to_string(code->valueint) +
-                    "). Check account/activation and device time.",
-                status};
-    }
-    const auto* data   = cJSON_GetObjectItem(json.get(), "data");
-    const auto* device = cJSON_IsObject(data) ? data : json.get();
-    const auto* name   = cJSON_GetObjectItem(device, "name");
-    if (!cJSON_IsString(name) || !name->valuestring[0])
-        return {Status::Failed, "Device API returned an unexpected response.", status};
-    return {Status::Available, "Device API connected", status};
+    return {Status::Available, "OpenAI base endpoint reachable", status};
 }
 
 ServiceResult probe(const std::string& url, const Headers& headers, const std::string& body, bool xiaozhi,
@@ -143,9 +134,6 @@ ServiceResult probe(const std::string& url, const Headers& headers, const std::s
     config.method                = xiaozhi ? HTTP_METHOD_POST : HTTP_METHOD_GET;
     config.timeout_ms            = RequestTimeoutMs;
     config.disable_auto_redirect = true;
-#ifdef CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
-    config.crt_bundle_attach = esp_crt_bundle_attach;
-#endif
     auto* client = esp_http_client_init(&config);
     if (!client) return {Status::Failed, "Not enough memory to start the network test."};
     const auto started = esp_timer_get_time();
@@ -330,7 +318,8 @@ void NetworkDiagnostics::run(const std::shared_ptr<State>& state)
                               std::string(reinterpret_cast<const char*>(ap.ssid),
                                           strnlen(reinterpret_cast<const char*>(ap.ssid), sizeof(ap.ssid))) +
                               "\nIP: " + address;
-        state->results.xiaozhi = {Status::Checking, "Connecting to Xiaozhi..."};
+        state->results.xiaozhi = {Status::Checking, "Testing OpenAI API..."};
+        state->results.m5stack = {Status::Waiting, "Waiting"};
     }
     GetHAL().startSntp();
     const auto clock_deadline = esp_timer_get_time() + 5000000;
@@ -338,29 +327,22 @@ void NetworkDiagnostics::run(const std::shared_ptr<State>& state)
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     if (state->cancelled) return;
-    Settings settings("wifi", false);
-    auto url = settings.GetString("ota_url");
-    if (url.empty()) url = CONFIG_OTA_URL;
-    auto& board                   = Board::GetInstance();
-    const Headers xiaozhi_headers = {{"Activation-Version", "1"},     {"Device-Id", SystemInfo::GetMacAddress()},
-                                     {"Client-Id", board.GetUuid()},  {"User-Agent", SystemInfo::GetUserAgent()},
-                                     {"Accept-Language", Lang::CODE}, {"Content-Type", "application/json"}};
-    auto xiaozhi                  = probe(url, xiaozhi_headers, board.GetSystemInfoJson(), true, state->cancelled);
-    {
-        std::lock_guard<std::mutex> lock(state->mutex);
-        state->results.xiaozhi = std::move(xiaozhi);
-        state->results.m5stack = {Status::Checking, "Connecting to M5Stack..."};
+    const auto cfg = hal_openai::get_config();
+    ServiceResult openai_res;
+    if (!hal_openai::has_api_key()) {
+        openai_res = {Status::Reachable,
+                      "OpenAI API key not set yet. Configure at " + hal_openai::get_web_config_url(), 0};
+    } else {
+        const Headers openai_headers = {{"Authorization", "Bearer " + cfg.apiKey}};
+        openai_res                   = probe(cfg.baseUrl + "/models", openai_headers, "", false, state->cancelled);
     }
-    if (state->cancelled) return;
-    auto base = httpUrl(secret_logic::get_server_url());
-    while (!base.empty() && base.back() == '/') base.pop_back();
-    const auto token = secret_logic::generate_auth_token();
-    auto m5stack =
-        token.empty() ? ServiceResult{Status::Failed, "Could not generate device authorization."}
-                      : probe(base + "/stackChan/device/info", {{"Authorization", token}}, "", false, state->cancelled);
     {
         std::lock_guard<std::mutex> lock(state->mutex);
-        state->results.m5stack = std::move(m5stack);
+        state->results.xiaozhi = std::move(openai_res);
+        state->results.m5stack = {Status::Available,
+                                  "Model: " + cfg.chatModel + " | Voice: " + cfg.ttsVoice +
+                                      "\nPortal: " + hal_openai::get_web_config_url(),
+                                  200};
     }
 }
 

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 #include "stackchan_display.h"
+#include <hal/hal_openai.h>
 #include <esp_log.h>
 #include <esp_err.h>
 #include <esp_lvgl_port.h>
@@ -332,24 +333,42 @@ void StackChanAvatarDisplay::SetEmotion(const char* emotion)
 
     auto& avatar = stackchan.avatar();
 
-    // Map emotion string to stackchan::Emotion
+    // Map emotion string to stackchan::Emotion and expressive servo posture
+    auto& motion = stackchan.motion();
     if (strcmp(emotion, "neutral") == 0) {
         avatar.setEmotion(Emotion::Neutral);
     } else if (strcmp(emotion, "happy") == 0) {
         avatar.setEmotion(Emotion::Happy);
+        if (!motion.isMoving()) {
+            motion.pitchServo().moveWithSpeed(220, 240);
+        }
     } else if (strcmp(emotion, "laughing") == 0) {
         avatar.setEmotion(Emotion::Happy);
+        avatar.clearDecorators();
+        avatar.addDecorator(std::make_unique<HeartDecorator>(lv_screen_active(), 3000));
+        if (!motion.isMoving()) {
+            motion.pitchServo().moveWithSpeed(280, 280);
+        }
     } else if (strcmp(emotion, "angry") == 0) {
         avatar.setEmotion(Emotion::Angry);
+        avatar.clearDecorators();
+        avatar.addDecorator(std::make_unique<AngryDecorator>(lv_screen_active(), 3000));
     } else if (strcmp(emotion, "sad") == 0) {
         avatar.setEmotion(Emotion::Sad);
+        if (!motion.isMoving()) {
+            motion.pitchServo().moveWithSpeed(40, 160);
+        }
     } else if (strcmp(emotion, "crying") == 0) {
         avatar.setEmotion(Emotion::Sad);
+        avatar.clearDecorators();
+        avatar.addDecorator(std::make_unique<SweatDecorator>(lv_screen_active(), 3000));
+        if (!motion.isMoving()) {
+            motion.pitchServo().moveWithSpeed(30, 160);
+        }
     } else if (strcmp(emotion, "sleepy") == 0) {
         avatar.setEmotion(Emotion::Sleepy);
         avatar.setSpeech("Zzz…");
         is_sleeping_ = true;
-        // avatar.mouth().setWeight(10);
 
         // Stop idle motion
         ESP_LOGW(TAG, "Stop idle motion");
@@ -361,7 +380,6 @@ void StackChanAvatarDisplay::SetEmotion(const char* emotion)
         }
 
         // Return to default pose
-        auto& motion = GetStackChan().motion();
         motion.pitchServo().moveWithSpeed(0, 80);
 
     } else if (strcmp(emotion, "doubtful") == 0) {
@@ -497,14 +515,18 @@ void StackChanAvatarDisplay::SetStatus(const char* status)
 
     if (strcmp(status, Lang::Strings::LISTENING) == 0) {
         if (speaking_modifier_id_ >= 0) {
-            // Start speaking
             stackchan.removeModifier(speaking_modifier_id_);
             avatar.mouth().setWeight(0);
             speaking_modifier_id_ = -1;
         }
 
-        GetHAL().setRgbColor(0, 0, 50, 0);
-        GetHAL().refreshRgb();
+        is_listening = true;
+        hal_openai::set_thinking_led_active(false);
+        if (!hal_openai::is_custom_led_active()) {
+            stackchan.leftNeonLight().setColor(0, 140, 0);
+            stackchan.rightNeonLight().setColor(0, 140, 0);
+            GetHAL().showRgbColor(0, 140, 0);
+        }
 
     } else if (strcmp(status, Lang::Strings::STANDBY) == 0) {
         _is_xiaozhi_ready = true;
@@ -517,18 +539,32 @@ void StackChanAvatarDisplay::SetStatus(const char* status)
         }
 
         is_idle = true;
+        hal_openai::set_thinking_led_active(false);
 
-        GetHAL().setRgbColor(0, 0, 0, 0);
-        GetHAL().refreshRgb();
+        if (!hal_openai::is_custom_led_active()) {
+            stackchan.leftNeonLight().setColor(0, 0, 0);
+            stackchan.rightNeonLight().setColor(0, 0, 0);
+            GetHAL().showRgbColor(0, 0, 0);
+        }
 
     } else if (strcmp(status, Lang::Strings::SPEAKING) == 0) {
         if (speaking_modifier_id_ < 0) {
-            speaking_modifier_id_ = stackchan.addModifier(std::make_unique<SpeakingModifier>(0, 180, false));
+            // Enable subtle speaking head motion (nods & yaw drift) alongside mouth animation
+            speaking_modifier_id_ = stackchan.addModifier(std::make_unique<SpeakingModifier>(0, 180, true));
         }
 
-        GetHAL().setRgbColor(0, 0, 0, 50);
-        GetHAL().refreshRgb();
+        hal_openai::set_thinking_led_active(false);
+        if (!hal_openai::is_custom_led_active()) {
+            stackchan.leftNeonLight().setColor(0, 45, 95);
+            stackchan.rightNeonLight().setColor(0, 45, 95);
+            GetHAL().showRgbColor(0, 35, 80);
+        }
     } else {
+        if (speaking_modifier_id_ >= 0) {
+            stackchan.removeModifier(speaking_modifier_id_);
+            avatar.mouth().setWeight(0);
+            speaking_modifier_id_ = -1;
+        }
         avatar.setSpeech(status);
     }
 

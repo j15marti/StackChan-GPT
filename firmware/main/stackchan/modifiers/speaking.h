@@ -7,7 +7,9 @@
 #include "../modifiable.h"
 #include "../utils/random.h"
 #include <smooth_ui_toolkit.hpp>
+#include <application.h>
 #include <hal/hal.h>
+#include <hal/hal_openai.h>
 #include <cstdint>
 
 namespace stackchan {
@@ -73,6 +75,13 @@ public:
 private:
     void animate_mouth(avatar::Avatar& avatar)
     {
+        if (!_has_lifetime && !hal_openai::is_voice_playback_active()) {
+            _is_mouth_open = false;
+            avatar.mouth().setWeight(0);
+            avatar.mouth().setRotation(0);
+            return;
+        }
+
         _is_mouth_open = !_is_mouth_open;
         auto& random   = Random::getInstance();
 

@@ -77,8 +77,14 @@ void AppSetup::onOpen()
               }}},
         },
         {
-            "AI.Agent",
-            {{"General",
+            "Agent.ai",
+            {{"OpenAI API",
+              [&]() {
+                  _destroy_menu    = true;
+                  _need_warm_reset = true;
+                  _worker          = std::make_unique<OpenaiSetupWorker>();
+              }},
+             {"General",
               [&]() {
                   _destroy_menu    = true;
                   _need_warm_reset = true;

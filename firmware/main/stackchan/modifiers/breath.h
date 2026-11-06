@@ -71,10 +71,9 @@ private:
         int delta = new_offset - _last_applied_offset;
         if (delta == 0) return;
 
-        // 批量移动五官
+        // 批量移动双眼（保持嘴巴在说话前静止）
         move_component(avatar.leftEye(), delta);
         move_component(avatar.rightEye(), delta);
-        move_component(avatar.mouth(), delta);
 
         _last_applied_offset = new_offset;
     }

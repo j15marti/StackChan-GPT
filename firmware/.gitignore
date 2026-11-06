@@ -64,5 +64,6 @@ obj/
 sdkconfig
 sdkconfig.old
 sdkconfig.defaults.local
+*.bin
 
 xiaozhi-esp32/

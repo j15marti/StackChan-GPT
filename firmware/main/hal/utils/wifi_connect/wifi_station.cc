@@ -7,6 +7,7 @@
 #include <esp_timer.h>
 #include "ssid_manager.h"
 #include <wifi_manager.h>
+#include <hal/hal_sd_backup.h>
 
 #define TAG                  "StackChanWifiStation"
 #define WIFI_EVENT_CONNECTED BIT0
@@ -324,6 +325,7 @@ void StackChanWifiStation::IpEventHandler(void* arg, esp_event_base_t, int32_t, 
     }
     // Replace stored credentials only after the new network has assigned an IP.
     SsidManager::GetInstance().AddSsid(ssid, password);
+    hal_sd_backup::request_save();
     xEventGroupSetBits(station->event_group_, WIFI_EVENT_CONNECTED);
     if (station->on_connected_) station->on_connected_(ssid);
 }

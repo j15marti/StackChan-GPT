@@ -4,14 +4,18 @@
  * SPDX-License-Identifier: MIT
  */
 #include "hal.h"
+#include "hal_openai.h"
 #include <mooncake_log.h>
 #include <mcp_server.h>
 #include <stackchan/stackchan.h>
 #include <apps/common/common.h>
+#include <algorithm>
+#include <cctype>
 
 using namespace stackchan;
 
 static const std::string_view _tag = "HAL-MCP";
+static int _gesture_modifier_id    = -1;
 
 void Hal::xiaozhi_mcp_init()
 {
@@ -20,13 +24,9 @@ void Hal::xiaozhi_mcp_init()
     // https://github.com/78/xiaozhi-esp32/blob/main/docs/mcp-usage.md
     auto& mcp_server = McpServer::GetInstance();
 
-    // System Prompt：
-    // You can control the robot's head. Use get_yaw and get_pitch to sense current position. Use set_yaw for horizontal
-    // movement and set_pitch for vertical movement. All angles are in degrees.
-
     mclog::tagInfo(_tag, "add robot.get_head_angles tool");
     mcp_server.AddTool("self.robot.get_head_angles",
-                       "Returns current yaw/pitch in degrees. Neutral position is {yaw:0, pitch:0}.",
+                       "Returns current yaw/pitch servo angles in degrees. Neutral position is {yaw:0, pitch:0}.",
                        std::vector<Property>{}, [this](const PropertyList& properties) -> ReturnValue {
                            LvglLockGuard lock;  // StackChan motion update is under the lvgl lock
 
@@ -41,14 +41,14 @@ void Hal::xiaozhi_mcp_init()
 
     mclog::tagInfo(_tag, "add robot.set_head_angles tool");
     mcp_server.AddTool("self.robot.set_head_angles",
-                       "Adjust head position. GUIDELINES: "
+                       "Adjust head servo position. GUIDELINES: "
                        "1. For natural interaction, stay within +/- 45 degrees. "
                        "2. Only use values > 70 if the user explicitly asks to look far away/behind. "
                        "3. Max ranges: Yaw(-128 to 128, -128 as your left), Pitch(0 to 90, 90 as your up). "
-                       "Speed(100-1000, 150 is natural).",
+                       "Speed(100-1000, 180 is natural).",
                        PropertyList({Property("yaw", kPropertyTypeInteger, -9999, -9999, 128),
                                      Property("pitch", kPropertyTypeInteger, -9999, -9999, 90),
-                                     Property("speed", kPropertyTypeInteger, 150, 100, 1000)}),
+                                     Property("speed", kPropertyTypeInteger, 180, 100, 1000)}),
                        [this](const PropertyList& properties) -> ReturnValue {
                            int speed = properties["speed"].value<int>();
                            int yaw   = properties["yaw"].value<int>();
@@ -69,11 +69,64 @@ void Hal::xiaozhi_mcp_init()
                            return true;
                        });
 
+    mclog::tagInfo(_tag, "add robot.perform_gesture tool");
+    mcp_server.AddTool(
+        "self.robot.perform_gesture",
+        "Perform an expressive servo and facial gesture on StackChan. "
+        "Supported gesture values: 'nod' (agree/yes), 'shake' (disagree/no), 'happy_dance' (happy sway), "
+        "'robot_dance' (robotic moves), 'look_around' (scan room), 'panic' (surprised shake), 'center' (reset pose).",
+        PropertyList({Property("gesture", kPropertyTypeString, std::string("nod"))}),
+        [this](const PropertyList& properties) -> ReturnValue {
+            std::string gesture = properties["gesture"].value<std::string>();
+            std::transform(gesture.begin(), gesture.end(), gesture.begin(),
+                           [](unsigned char c) { return std::tolower(c); });
+
+            mclog::tagInfo(_tag, "perform_gesture: {}", gesture);
+
+            LvglLockGuard lock;
+            auto& sc = GetStackChan();
+            if (_gesture_modifier_id >= 0) {
+                sc.removeModifier(_gesture_modifier_id);
+                _gesture_modifier_id = -1;
+            }
+
+            if (gesture == "nod" || gesture == "yes") {
+                static const animation::KeyframeSequence kNodSeq = {
+                    {{0, 0, 0, 100}, {0, 0, 0, 100}, {0, 0, 0, 30}, {0, 250}, {320, 350}, 350},
+                    {{0, 0, 0, 100}, {0, 0, 0, 100}, {0, 0, 0, 0}, {0, 250}, {50, 350}, 350},
+                    {{0, 0, 0, 100}, {0, 0, 0, 100}, {0, 0, 0, 30}, {0, 250}, {300, 350}, 350},
+                    {{0, 0, 0, 100}, {0, 0, 0, 100}, {0, 0, 0, 0}, {0, 250}, {120, 250}, 400},
+                };
+                _gesture_modifier_id = sc.addModifier(std::make_unique<DanceModifier>(kNodSeq));
+            } else if (gesture == "shake" || gesture == "no") {
+                static const animation::KeyframeSequence kShakeSeq = {
+                    {{-10, 0, 0, 100}, {-10, 0, 0, 100}, {0, 0, 0, 0}, {350, 400}, {100, 250}, 350},
+                    {{10, 0, 0, 100}, {10, 0, 0, 100}, {0, 0, 0, 0}, {-350, 400}, {100, 250}, 400},
+                    {{-10, 0, 0, 100}, {-10, 0, 0, 100}, {0, 0, 0, 0}, {280, 400}, {100, 250}, 350},
+                    {{0, 0, 0, 100}, {0, 0, 0, 100}, {0, 0, 0, 0}, {0, 300}, {100, 250}, 400},
+                };
+                _gesture_modifier_id = sc.addModifier(std::make_unique<DanceModifier>(kShakeSeq));
+            } else if (gesture == "happy_dance" || gesture == "happy" || gesture == "dance") {
+                _gesture_modifier_id = sc.addModifier(std::make_unique<DanceModifier>(DanceModifier::Happy));
+            } else if (gesture == "robot_dance" || gesture == "robot") {
+                _gesture_modifier_id = sc.addModifier(std::make_unique<DanceModifier>(DanceModifier::Robot));
+            } else if (gesture == "look_around" || gesture == "scan") {
+                _gesture_modifier_id = sc.addModifier(std::make_unique<DanceModifier>(DanceModifier::LookAround));
+            } else if (gesture == "panic") {
+                _gesture_modifier_id = sc.addModifier(std::make_unique<DanceModifier>(DanceModifier::Panic));
+            } else {
+                sc.motion().goHome(250);
+            }
+
+            return true;
+        });
+
     mclog::tagInfo(_tag, "add robot.set_led_color tool");
     mcp_server.AddTool(
         "self.robot.set_led_color",
-        "Set the color of the robot's INTERNAL onboard LED. This is NOT for room lights. "
-        "Values: 0-168 (safe range). Red=168,0,0; Green=0,168,0; Blue=0,0,168; White=100,100,100; Off=0,0,0.",
+        "Set the RGB color of all 12 onboard LEDs (left and right neon strips) on StackChan. "
+        "Values: 0-168 (safe brightness range). Red=168,0,0; Green=0,168,0; Blue=0,0,168; "
+        "Cyan=0,140,168; Purple=120,0,168; WarmWhite=120,100,80; Off=0,0,0.",
         PropertyList({Property("red", kPropertyTypeInteger, 0, 0, 168),
                       Property("green", kPropertyTypeInteger, 0, 0, 168),
                       Property("blue", kPropertyTypeInteger, 0, 0, 168)}),
@@ -84,11 +137,80 @@ void Hal::xiaozhi_mcp_init()
 
             mclog::tagInfo(_tag, "set_led_color: r={}, g={}, b={}", r, g, b);
 
+            hal_openai::set_custom_led_active((r != 0) || (g != 0) || (b != 0));
+
             LvglLockGuard lock;
 
             GetStackChan().leftNeonLight().setColor(r, g, b);
             GetStackChan().rightNeonLight().setColor(r, g, b);
+            GetHAL().showRgbColor(r, g, b);
 
+            return true;
+        });
+
+    mclog::tagInfo(_tag, "add robot.set_led_side_color tool");
+    mcp_server.AddTool(
+        "self.robot.set_led_side_color",
+        "Set left and right RGB LED strips independently on StackChan (each side has 6 RGB LEDs). "
+        "Values: 0-168 per channel.",
+        PropertyList({Property("left_red", kPropertyTypeInteger, 0, 0, 168),
+                      Property("left_green", kPropertyTypeInteger, 0, 0, 168),
+                      Property("left_blue", kPropertyTypeInteger, 0, 0, 168),
+                      Property("right_red", kPropertyTypeInteger, 0, 0, 168),
+                      Property("right_green", kPropertyTypeInteger, 0, 0, 168),
+                      Property("right_blue", kPropertyTypeInteger, 0, 0, 168)}),
+        [this](const PropertyList& properties) -> ReturnValue {
+            int lr = properties["left_red"].value<int>();
+            int lg = properties["left_green"].value<int>();
+            int lb = properties["left_blue"].value<int>();
+            int rr = properties["right_red"].value<int>();
+            int rg = properties["right_green"].value<int>();
+            int rb = properties["right_blue"].value<int>();
+
+            mclog::tagInfo(_tag, "set_led_side_color: L=({},{},{}) R=({},{},{})", lr, lg, lb, rr, rg, rb);
+
+            hal_openai::set_custom_led_active((lr | lg | lb | rr | rg | rb) != 0);
+
+            LvglLockGuard lock;
+            GetStackChan().leftNeonLight().setColor(lr, lg, lb);
+            GetStackChan().rightNeonLight().setColor(rr, rg, rb);
+            for (int i = 0; i < 6; ++i) {
+                GetHAL().setRgbColor(i, lr, lg, lb);
+                GetHAL().setRgbColor(i + 6, rr, rg, rb);
+            }
+            GetHAL().refreshRgb();
+
+            return true;
+        });
+
+    mclog::tagInfo(_tag, "add robot.set_emotion tool");
+    mcp_server.AddTool(
+        "self.robot.set_emotion",
+        "Set StackChan's facial expression on the screen. "
+        "Supported emotions: 'neutral', 'happy', 'laughing', 'angry', 'sad', 'crying', 'sleepy', 'doubtful'.",
+        PropertyList({Property("emotion", kPropertyTypeString, std::string("happy"))}),
+        [this](const PropertyList& properties) -> ReturnValue {
+            std::string emotion = properties["emotion"].value<std::string>();
+            mclog::tagInfo(_tag, "set_emotion: {}", emotion);
+
+            LvglLockGuard lock;
+            auto& sc = GetStackChan();
+            if (sc.hasAvatar()) {
+                auto& av = sc.avatar();
+                if (emotion == "happy" || emotion == "laughing") {
+                    av.setEmotion(avatar::Emotion::Happy);
+                } else if (emotion == "angry") {
+                    av.setEmotion(avatar::Emotion::Angry);
+                } else if (emotion == "sad" || emotion == "crying") {
+                    av.setEmotion(avatar::Emotion::Sad);
+                } else if (emotion == "sleepy") {
+                    av.setEmotion(avatar::Emotion::Sleepy);
+                } else if (emotion == "doubtful") {
+                    av.setEmotion(avatar::Emotion::Doubt);
+                } else {
+                    av.setEmotion(avatar::Emotion::Neutral);
+                }
+            }
             return true;
         });
 

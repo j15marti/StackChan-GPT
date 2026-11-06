@@ -20,7 +20,7 @@ struct ToggleInfo {
 
 // Keep these keys compatible with the original PR's saved preferences.
 inline constexpr std::array<ToggleInfo, TOGGLE_COUNT> TOGGLE_LIST = {{
-    {"ai_agent", "AI.AGENT"},
+    {"ai_agent", "Agent.ai"},
     {"avatar", "AVATAR"},
     {"espnow_remote", "ESPNOW.REMOTE"},
     {"app_center", "APP.CENTER"},

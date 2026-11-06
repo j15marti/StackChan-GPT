@@ -97,6 +97,8 @@ private:
         None,
         AppDownload,
         WaitAppConnection,
+        TouchKeyboard,
+        NameKeyboard,
         AppConnected,
         Done,
     };
@@ -118,10 +120,12 @@ private:
         std::unique_ptr<uitk::lvgl_cpp::Label> label_ios;
         std::unique_ptr<uitk::lvgl_cpp::Label> label_android;
         std::unique_ptr<uitk::lvgl_cpp::Button> btn_next;
+        std::unique_ptr<uitk::lvgl_cpp::Button> btn_keyboard;
         std::unique_ptr<uitk::lvgl_cpp::Button> btn_quit;
         std::unique_ptr<uitk::lvgl_cpp::Label> info;
-        bool next_clicked = false;
-        bool quit_clicked = false;
+        bool next_clicked     = false;
+        bool keyboard_clicked = false;
+        bool quit_clicked     = false;
 
         void reset()
         {
@@ -132,10 +136,12 @@ private:
             label_ios.reset();
             label_android.reset();
             btn_next.reset();
+            btn_keyboard.reset();
             btn_quit.reset();
             info.reset();
-            next_clicked = false;
-            quit_clicked = false;
+            next_clicked     = false;
+            keyboard_clicked = false;
+            quit_clicked     = false;
         }
     };
     StateAppDownloadData _state_app_download_data;
@@ -143,16 +149,86 @@ private:
     struct StateWaitAppConnectionData {
         std::unique_ptr<uitk::lvgl_cpp::Container> panel;
         std::unique_ptr<uitk::lvgl_cpp::Button> btn_id;
+        std::unique_ptr<uitk::lvgl_cpp::Button> btn_keyboard;
+        std::unique_ptr<uitk::lvgl_cpp::Button> btn_skip;
         std::unique_ptr<uitk::lvgl_cpp::Label> info;
+        bool keyboard_clicked = false;
+        bool skip_clicked     = false;
 
         void reset()
         {
             panel.reset();
             btn_id.reset();
+            btn_keyboard.reset();
+            btn_skip.reset();
             info.reset();
+            keyboard_clicked = false;
+            skip_clicked     = false;
         }
     };
     StateWaitAppConnectionData _state_wait_app_connection_data;
+
+    struct StateTouchKeyboardData {
+        std::unique_ptr<uitk::lvgl_cpp::Container> panel;
+        std::unique_ptr<uitk::lvgl_cpp::Label> label_status;
+        std::unique_ptr<uitk::lvgl_cpp::TextArea> ta_ssid;
+        std::unique_ptr<uitk::lvgl_cpp::TextArea> ta_password;
+        std::unique_ptr<uitk::lvgl_cpp::Button> btn_connect;
+        std::unique_ptr<uitk::lvgl_cpp::Button> btn_back;
+        std::unique_ptr<uitk::lvgl_cpp::Button> btn_skip;
+        lv_obj_t* keyboard    = nullptr;
+        bool connect_clicked  = false;
+        bool back_clicked     = false;
+        bool skip_clicked     = false;
+
+        void reset()
+        {
+            if (keyboard) {
+                lv_obj_delete(keyboard);
+                keyboard = nullptr;
+            }
+            ta_ssid.reset();
+            ta_password.reset();
+            btn_connect.reset();
+            btn_back.reset();
+            btn_skip.reset();
+            label_status.reset();
+            panel.reset();
+            connect_clicked = false;
+            back_clicked    = false;
+            skip_clicked    = false;
+        }
+    };
+    StateTouchKeyboardData _state_touch_keyboard_data;
+
+    struct StateNameKeyboardData {
+        std::unique_ptr<uitk::lvgl_cpp::Container> panel;
+        std::unique_ptr<uitk::lvgl_cpp::Label> label_title;
+        std::unique_ptr<uitk::lvgl_cpp::Label> label_subtitle;
+        std::unique_ptr<uitk::lvgl_cpp::TextArea> ta_name;
+        std::unique_ptr<uitk::lvgl_cpp::Button> btn_save;
+        std::unique_ptr<uitk::lvgl_cpp::Button> btn_skip;
+        lv_obj_t* keyboard = nullptr;
+        bool save_clicked  = false;
+        bool skip_clicked  = false;
+
+        void reset()
+        {
+            if (keyboard) {
+                lv_obj_delete(keyboard);
+                keyboard = nullptr;
+            }
+            ta_name.reset();
+            btn_save.reset();
+            btn_skip.reset();
+            label_subtitle.reset();
+            label_title.reset();
+            panel.reset();
+            save_clicked = false;
+            skip_clicked = false;
+        }
+    };
+    StateNameKeyboardData _state_name_keyboard_data;
 
     struct StateDoneData {
         int reboot_count = 0;
@@ -342,6 +418,37 @@ private:
     std::vector<uint32_t> _idle_shutdown_levels;
     int32_t _pending_idle_index = -1;
     bool _confirm_flag          = false;
+};
+
+/**
+ * @brief
+ *
+ */
+class OpenaiSetupWorker : public WorkerBase {
+public:
+    OpenaiSetupWorker();
+    ~OpenaiSetupWorker();
+    void update() override;
+
+private:
+    void refresh_labels();
+
+    std::unique_ptr<uitk::lvgl_cpp::Container> _panel;
+    std::unique_ptr<uitk::lvgl_cpp::Container> _card_info;
+    std::unique_ptr<uitk::lvgl_cpp::Label> _label_title;
+    std::unique_ptr<uitk::lvgl_cpp::Label> _label_key_status;
+    std::unique_ptr<uitk::lvgl_cpp::Label> _label_url;
+    std::unique_ptr<uitk::lvgl_cpp::Qrcode> _qrcode_portal;
+    std::unique_ptr<uitk::lvgl_cpp::Button> _btn_voice;
+    std::unique_ptr<uitk::lvgl_cpp::Button> _btn_model;
+    std::unique_ptr<uitk::lvgl_cpp::Button> _btn_back;
+
+    size_t _voice_index   = 0;
+    size_t _model_index   = 0;
+    uint32_t _last_poll   = 0;
+    bool _voice_clicked   = false;
+    bool _model_clicked   = false;
+    bool _back_clicked    = false;
 };
 
 /**

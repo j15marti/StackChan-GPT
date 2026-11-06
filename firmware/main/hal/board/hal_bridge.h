@@ -9,6 +9,7 @@
 #include <lvgl.h>
 #include <driver/i2c_master.h>
 #include <string_view>
+#include <functional>
 
 namespace hal_bridge {
 
@@ -28,7 +29,7 @@ struct XiaozhiConfig_t {
     uint32_t idleShutdownTimeSeconds = 600;
     bool allowShutdownWhenCharging   = false;
     uint8_t idleRandomMovementLevel  = 2;
-    bool startAiAgentOnBoot          = false;
+    bool startAiAgentOnBoot          = true;
 };
 
 void lock();
@@ -61,6 +62,14 @@ void board_set_backlight_brightness(uint8_t brightness, bool permanent = false);
 uint8_t board_get_backlight_brightness();
 void board_set_speaker_volume(uint8_t volume, bool permanent = false);
 uint8_t board_get_speaker_volume();
+
+// Mounts the microSD card, runs fn with the mount point, then unmounts.
+// Returns false without calling fn when no card is available.
+bool board_sd_card_session(const std::function<void(const char* mount_point)>& fn);
+
+// Mounts the microSD card, runs fn with the mount point, then unmounts.
+// Returns false (fn not called) when no card is inserted or it cannot be mounted.
+bool board_sd_card_session(const std::function<void(const char* mount_point)>& fn);
 
 void app_play_sound(const std::string_view& sound);
 

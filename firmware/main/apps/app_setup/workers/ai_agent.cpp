@@ -6,18 +6,167 @@
 #include "workers.h"
 #include <mooncake_log.h>
 #include <hal/hal.h>
+#include <hal/hal_openai.h>
+#include <apps/common/loading_page/loading_page.h>
 #include <array>
 #include <vector>
 
 using namespace smooth_ui_toolkit::lvgl_cpp;
 using namespace setup_workers;
 
-static std::string _tag = "Setup-AIAgent";
+static std::string _tag = "Setup-AgentAI";
 
 namespace {
 static const std::array<const char*, 4> _idle_motion_level_labels = {{"Off", "Low", "Medium", "High"}};
+static const std::array<const char*, 11> _openai_voices = {
+    {"marin", "cedar", "nova", "alloy", "shimmer", "echo", "fable", "onyx", "coral", "ash", "sage"}};
+static const std::array<const char*, 8> _openai_models = {
+    {"gpt-live", "gpt-5.4-nano", "gpt-5.5", "gpt-5.6-terra", "gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1"}};
 
 }  // namespace
+
+OpenaiSetupWorker::OpenaiSetupWorker()
+{
+    mclog::tagInfo(_tag, "OpenaiSetupWorker start");
+
+    {
+        auto loading_page = std::make_unique<view::LoadingPage>(0xEDF4FF, 0x26206A);
+        GetHAL().lvglUnlock();
+
+        GetHAL().startNetwork([&](std::string_view msg) {
+            LvglLockGuard lock;
+            loading_page->setMessage(msg);
+        });
+
+        hal_openai::start_web_config_server();
+        GetHAL().lvglLock();
+    }
+
+    auto cfg = hal_openai::get_config();
+    for (size_t i = 0; i < _openai_voices.size(); ++i) {
+        if (cfg.ttsVoice == _openai_voices[i]) {
+            _voice_index = i;
+            break;
+        }
+    }
+    for (size_t i = 0; i < _openai_models.size(); ++i) {
+        if (cfg.chatModel == _openai_models[i]) {
+            _model_index = i;
+            break;
+        }
+    }
+
+    _panel = std::make_unique<Container>(lv_screen_active());
+    _panel->setBgColor(lv_color_hex(0xEDF4FF));
+    _panel->align(LV_ALIGN_CENTER, 0, 0);
+    _panel->setBorderWidth(0);
+    _panel->setSize(320, 240);
+    _panel->setRadius(0);
+    _panel->setPadding(0, 40, 12, 12);
+    _panel->setScrollDir(LV_DIR_VER);
+    _panel->setScrollbarMode(LV_SCROLLBAR_MODE_ACTIVE);
+
+    _card_info = std::make_unique<Container>(_panel->get());
+    _card_info->setSize(296, 174);
+    _card_info->align(LV_ALIGN_TOP_MID, 0, 16);
+    _card_info->setBgColor(lv_color_hex(0xD2E3FF));
+    _card_info->setBorderWidth(0);
+    _card_info->setRadius(18);
+    _card_info->setPadding(0, 0, 0, 0);
+    _card_info->removeFlag(LV_OBJ_FLAG_SCROLLABLE);
+
+    _label_title = std::make_unique<Label>(_card_info->get());
+    _label_title->setText("Agent.ai — OpenAI Config");
+    _label_title->setTextFont(&lv_font_montserrat_16);
+    _label_title->setTextColor(lv_color_hex(0x26206A));
+    _label_title->align(LV_ALIGN_TOP_MID, 0, 10);
+
+    _qrcode_portal = std::make_unique<Qrcode>(_card_info->get());
+    _qrcode_portal->setSize(86);
+    _qrcode_portal->setDarkColor(lv_color_hex(0x221C5B));
+    _qrcode_portal->setLightColor(lv_color_hex(0xD2E3FF));
+    _qrcode_portal->update(hal_openai::get_web_config_url());
+    _qrcode_portal->align(LV_ALIGN_LEFT_MID, 14, 16);
+
+    _label_key_status = std::make_unique<Label>(_card_info->get());
+    _label_key_status->setTextFont(&lv_font_montserrat_14);
+    _label_key_status->setTextColor(lv_color_hex(0x26206A));
+    _label_key_status->setWidth(176);
+    _label_key_status->align(LV_ALIGN_TOP_LEFT, 110, 42);
+
+    _label_url = std::make_unique<Label>(_card_info->get());
+    _label_url->setTextFont(&lv_font_montserrat_14);
+    _label_url->setTextColor(lv_color_hex(0x134233));
+    _label_url->setWidth(176);
+    _label_url->align(LV_ALIGN_TOP_LEFT, 110, 96);
+
+    _btn_voice = std::make_unique<Button>(_panel->get());
+    apply_button_common_style(*_btn_voice);
+    _btn_voice->align(LV_ALIGN_TOP_MID, 0, 202);
+    _btn_voice->setSize(290, 44);
+    _btn_voice->onClick().connect([this]() { _voice_clicked = true; });
+
+    _btn_model = std::make_unique<Button>(_panel->get());
+    apply_button_common_style(*_btn_model);
+    _btn_model->align(LV_ALIGN_TOP_MID, 0, 256);
+    _btn_model->setSize(290, 44);
+    _btn_model->onClick().connect([this]() { _model_clicked = true; });
+
+    _btn_back = std::make_unique<Button>(_panel->get());
+    apply_button_common_style(*_btn_back);
+    _btn_back->align(LV_ALIGN_TOP_MID, 0, 310);
+    _btn_back->setSize(290, 46);
+    _btn_back->setBgColor(lv_color_hex(0x615B9E));
+    _btn_back->label().setText("Done");
+    _btn_back->onClick().connect([this]() { _back_clicked = true; });
+
+    refresh_labels();
+}
+
+OpenaiSetupWorker::~OpenaiSetupWorker()
+{
+}
+
+void OpenaiSetupWorker::refresh_labels()
+{
+    auto cfg = hal_openai::get_config();
+    _label_key_status->setText(
+        fmt::format("Name: {}\nKey: {}", cfg.wakeWord, hal_openai::mask_api_key(cfg.apiKey)));
+    _label_url->setText(fmt::format("Web Portal:\n{}", hal_openai::get_web_config_url()));
+    _btn_voice->label().setText(fmt::format("Voice: {} (Tap)", _openai_voices[_voice_index]));
+    _btn_model->label().setText(fmt::format("Model: {} (Tap)", _openai_models[_model_index]));
+}
+
+void OpenaiSetupWorker::update()
+{
+    if (_voice_clicked) {
+        _voice_clicked = false;
+        _voice_index   = (_voice_index + 1) % _openai_voices.size();
+        auto cfg       = hal_openai::get_config();
+        cfg.ttsVoice   = _openai_voices[_voice_index];
+        hal_openai::set_config(cfg);
+        refresh_labels();
+    }
+
+    if (_model_clicked) {
+        _model_clicked = false;
+        _model_index   = (_model_index + 1) % _openai_models.size();
+        auto cfg       = hal_openai::get_config();
+        cfg.chatModel  = _openai_models[_model_index];
+        hal_openai::set_config(cfg);
+        refresh_labels();
+    }
+
+    if (GetHAL().millis() - _last_poll > 2000) {
+        _last_poll = GetHAL().millis();
+        refresh_labels();
+    }
+
+    if (_back_clicked) {
+        _back_clicked = false;
+        _is_done      = true;
+    }
+}
 
 XiaozhiPowerSavingWorker::XiaozhiPowerSavingWorker()
 {
@@ -218,7 +367,7 @@ XiaozhiGeneralWorker::XiaozhiGeneralWorker()
     _panel_startup->removeFlag(LV_OBJ_FLAG_SCROLLABLE);
 
     _label_startup_title = std::make_unique<Label>(_panel_startup->get());
-    _label_startup_title->setText("Start AI Agent on boot:");
+    _label_startup_title->setText("Start Agent.ai on boot:");
     _label_startup_title->setTextFont(&lv_font_montserrat_16);
     _label_startup_title->setTextColor(lv_color_hex(0x26206A));
     _label_startup_title->setWidth(260);
