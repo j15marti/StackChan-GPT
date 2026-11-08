@@ -8,6 +8,7 @@
 #include "board/hal_bridge.h"
 #include "hal.h"
 #include "idle_camera_motion.h"
+#include "robot_dance.h"
 
 #include <application.h>
 #include <esp_log.h>
@@ -48,6 +49,9 @@ bool HasElapsed(uint32_t start, uint32_t interval)
 bool IsRobotAtRest()
 {
     if (!hal_bridge::is_xiaozhi_ready()) {
+        return false;
+    }
+    if (robot_dance::is_active()) {
         return false;
     }
 

@@ -7,6 +7,7 @@
 #include "hal_openai.h"
 #include "openai_web_search.h"
 #include "openai_config.h"
+#include "robot_dance.h"
 #include "hal.h"
 #include "board/hal_bridge.h"
 
@@ -211,8 +212,9 @@ std::string build_system_prompt(const OpenaiConfig_t& cfg, bool live_voice)
         prompt +=
             " You are speaking aloud in a realtime voice conversation: never say emotion tags or brackets out loud,"
             " just speak naturally and concisely."
-            " Delegate to the backend whenever the user asks you to move, look, nod, shake, dance, change LED"
-            " colors, take a photo, adjust volume or brightness, or use any robot hardware tool."
+            " Delegate to the backend whenever the user asks you to move, look, nod, shake, dance to the music,"
+            " change LED colors, take a photo, adjust volume or brightness, or use any robot hardware tool."
+            " For dancing, call self__robot__dance (duration_seconds default 45, or stop=true to end early)."
             " Also delegate when news, weather, local info, sports scores, current information or a web search"
             " is requested; the backend can use hosted web_search.";
     }
@@ -891,6 +893,14 @@ bool OpenaiProtocol::SendAudio(std::unique_ptr<AudioStreamPacket> packet)
 {
     if (!packet) {
         return false;
+    }
+
+    // While dancing, feed mic PCM to the beat tracker and skip wake / STT capture.
+    if (robot_dance::is_active()) {
+        if (!packet->pcm.empty()) {
+            robot_dance::feed_pcm(packet->pcm.data(), packet->pcm.size(), kInputSampleRate);
+        }
+        return true;
     }
 
     // In Standby the audio channel is closed; capture utterances to check for the custom wake word.

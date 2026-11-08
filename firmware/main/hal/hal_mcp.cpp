@@ -5,6 +5,7 @@
  */
 #include "hal.h"
 #include "hal_openai.h"
+#include "robot_dance.h"
 #include <mooncake_log.h>
 #include <mcp_server.h>
 #include <stackchan/stackchan.h>
@@ -73,8 +74,9 @@ void Hal::xiaozhi_mcp_init()
     mcp_server.AddTool(
         "self.robot.perform_gesture",
         "Perform an expressive servo and facial gesture on StackChan. "
-        "Supported gesture values: 'nod' (agree/yes), 'shake' (disagree/no), 'happy_dance' (happy sway), "
-        "'robot_dance' (robotic moves), 'look_around' (scan room), 'panic' (surprised shake), 'center' (reset pose).",
+        "Supported gesture values: 'nod' (agree/yes), 'shake' (disagree/no), 'dance' (beat-synced music dance), "
+        "'happy_dance' (happy sway), 'robot_dance' (robotic moves), 'look_around' (scan room), "
+        "'panic' (surprised shake), 'center' (reset pose). Prefer self.robot.dance for dancing to music.",
         PropertyList({Property("gesture", kPropertyTypeString, std::string("nod"))}),
         [this](const PropertyList& properties) -> ReturnValue {
             std::string gesture = properties["gesture"].value<std::string>();
@@ -106,7 +108,10 @@ void Hal::xiaozhi_mcp_init()
                     {{0, 0, 0, 100}, {0, 0, 0, 100}, {0, 0, 0, 0}, {0, 300}, {100, 250}, 400},
                 };
                 _gesture_modifier_id = sc.addModifier(std::make_unique<DanceModifier>(kShakeSeq));
-            } else if (gesture == "happy_dance" || gesture == "happy" || gesture == "dance") {
+            } else if (gesture == "dance" || gesture == "dance_to_music" || gesture == "music_dance") {
+                // Beat-synced music dance (mic BPM + LED sequence); not the short Happy keyframe.
+                return robot_dance::start(robot_dance::kDefaultDurationSec, false);
+            } else if (gesture == "happy_dance" || gesture == "happy") {
                 _gesture_modifier_id = sc.addModifier(std::make_unique<DanceModifier>(DanceModifier::Happy));
             } else if (gesture == "robot_dance" || gesture == "robot") {
                 _gesture_modifier_id = sc.addModifier(std::make_unique<DanceModifier>(DanceModifier::Robot));
@@ -119,6 +124,25 @@ void Hal::xiaozhi_mcp_init()
             }
 
             return true;
+        });
+
+    mclog::tagInfo(_tag, "add robot.dance tool");
+    mcp_server.AddTool(
+        "self.robot.dance",
+        "Dance to ambient music with beat-synced head motion and RGB LEDs. "
+        "Estimates BPM from the microphone (defaults to 120 if unclear), then for each 16-beat block "
+        "alternates head up/down then right/left. LEDs flash right/left halves through red, blue, green, purple. "
+        "Default duration is 45 seconds (max 120). Set stop=true to end an active dance early. "
+        "Wake-word listening is paused while dancing; listening/thinking LED patterns are overridden. "
+        "Use whenever the user says dance, dance to the music, or stop dancing.",
+        PropertyList({Property("duration_seconds", kPropertyTypeInteger, robot_dance::kDefaultDurationSec,
+                               robot_dance::kMinDurationSec, robot_dance::kMaxDurationSec),
+                      Property("stop", kPropertyTypeBoolean, false)}),
+        [](const PropertyList& properties) -> ReturnValue {
+            const int duration = properties["duration_seconds"].value<int>();
+            const bool stop    = properties["stop"].value<bool>();
+            mclog::tagInfo(_tag, "dance: duration={} stop={}", duration, stop);
+            return robot_dance::start(duration, stop);
         });
 
     mclog::tagInfo(_tag, "add robot.set_led_color tool");

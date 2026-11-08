@@ -132,6 +132,14 @@ ctest --test-dir build-host --output-on-failure
 Alternatively set `CJSON_DIR` to a checkout of cJSON v1.7.19. See
 [build and validation notes](../docs/WEB_SEARCH_v1.8.6.md) for the delivered images.
 
+## Beat-synced music dance (v1.8.9)
+
+Ask StackChan to dance (or dance to the music). The LLM calls `self.robot.dance`, which estimates
+BPM from microphone onset energy (default 120), then drives Feetech yaw/pitch servos and the left/right
+neon strips in sync with the beat for 45 seconds by default (`stop=true` ends early). Wake STT is paused
+for the dance; listening and thinking LED patterns are overridden. See
+[v1.8.9 dance notes](../docs/DANCE_v1.8.9.md).
+
 ## Deterministic idle camera tracking (v1.8.7)
 
 When the assistant has remained idle with audio playback drained for 30 seconds, the firmware

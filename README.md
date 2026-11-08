@@ -4,15 +4,15 @@
 
 This repository contains the official [m5stack/StackChan](https://github.com/m5stack/StackChan) firmware modified to use the **OpenAI API** directly when the **`GPT-Live`** (`Agent.ai`) app is selected on the device, without signing into or activating against the original Xiaozhi / M5Stack AI server.
 
-## Quick Flash (`StackChan-GPT-v1.8.8.bin`)
+## Quick Flash (`StackChan-GPT-v1.8.9.bin`)
 
-A pre-built merged firmware image for the 16 MB ESP32-S3 board ([`StackChan-GPT-v1.8.8.bin`](StackChan-GPT-v1.8.8.bin)) is included in the repository root:
+A pre-built merged firmware image for the 16 MB ESP32-S3 board ([`StackChan-GPT-v1.8.9.bin`](StackChan-GPT-v1.8.9.bin)) is included in the repository root:
 
 ```bash
-esptool.py --chip esp32s3 -p /dev/cu.usbmodem* -b 460800 write_flash 0x0 StackChan-GPT-v1.8.8.bin
+esptool.py --chip esp32s3 -p /dev/cu.usbmodem* -b 460800 write_flash 0x0 StackChan-GPT-v1.8.9.bin
 ```
 
-Before flashing a merged image at `0x0`, make sure your microSD configuration backup is current. The image includes blank gaps over the NVS settings area. The binary contains no API key or Wi-Fi credentials. See [v1.8.7 web search notes](docs/WEB_SEARCH_v1.8.7.md) and [idle camera notes](docs/IDLE_CAMERA_TRACKING_v1.8.7.md). Wake-word sensitivity improvements landed in **v1.8.8**.
+Before flashing a merged image at `0x0`, make sure your microSD configuration backup is current. The image includes blank gaps over the NVS settings area. The binary contains no API key or Wi-Fi credentials. See [v1.8.9 dance notes](docs/DANCE_v1.8.9.md), [v1.8.7 web search notes](docs/WEB_SEARCH_v1.8.7.md), and [idle camera notes](docs/IDLE_CAMERA_TRACKING_v1.8.7.md). Beat-synced music dance landed in **v1.8.9**.
 
 ## Settings persistence (NVS + microSD)
 
@@ -50,6 +50,10 @@ Example `stackchan_config.json` schema (do not commit real secrets):
 }
 ```
 
+## Highlights (`v1.8.9`)
+
+- **Beat-synced music dance**: Say “dance” / “dance to the music” to call `self.robot.dance`. Mic PCM onset energy estimates BPM (default 120), then the head alternates up/down for 16 beats and right/left for 16, while left/right neon halves flash red → blue → green → purple. Default duration **45 s** (`stop=true` ends early). Listening/thinking LEDs are overridden for the dance. See [docs/DANCE_v1.8.9.md](docs/DANCE_v1.8.9.md).
+
 ## Highlights (`v1.8.7`)
 
 - **Live web search**: News, weather, sports scores, local businesses, and current facts via OpenAI Responses `web_search`. HTTP chat uses `self__web__search` → `/v1/responses`; GPT-Live also gets hosted `web_search` in Responses delegation. Setup portal **Latest web search and source links** shows citations. Weather/sports answers without URL citations are accepted.
@@ -68,7 +72,7 @@ Example `stackchan_config.json` schema (do not commit real secrets):
   - Automatically backs up and restores Wi-Fi networks, OpenAI API key, voice/model preferences, and custom wake word to `/sdcard/stackchan_config.json` (plus optional `/sdcard/openai_key.txt`) so settings survive full flash erases (`0x0` reflashes). See **Settings persistence** above.
 - **Full Servo Motor & RGB LED Integration**:
   - Automatic state lighting across all 12 RGB LEDs (Listening = Emerald Green, Thinking = Purple, Speaking = Cyan/Blue, Standby = Off) and natural speaking head movements (`SpeakingModifier` with servo nods/yaw drift + emotion postures).
-  - OpenAI Function/Tool Calling controls `self.robot.set_head_angles`, `self.robot.get_head_angles`, `self.robot.perform_gesture` (`nod`, `shake`, `happy_dance`, `robot_dance`, `look_around`, `panic`, `center`), `self.robot.set_led_color`, `self.robot.set_led_side_color`, `self.robot.set_emotion`, `self.camera.take_photo`, reminders, speaker volume, and screen brightness.
+  - OpenAI Function/Tool Calling controls `self.robot.dance`, `self.robot.set_head_angles`, `self.robot.get_head_angles`, `self.robot.perform_gesture` (`nod`, `shake`, `dance`, `happy_dance`, `robot_dance`, `look_around`, `panic`, `center`), `self.robot.set_led_color`, `self.robot.set_led_side_color`, `self.robot.set_emotion`, `self.camera.take_photo`, reminders, speaker volume, and screen brightness.
 - **Compatible with StackChan World on iOS**:
   - Preserves BLE Wi-Fi provisioning (`e2e5e5ff-1234-5678-1234-56789abcdef0`), BLE Motion/Avatar/RGB control (`e2e5e5e0-1234-5678-1234-56789abcdef0`), and LAN WebSocket Avatar/Video streaming.
 

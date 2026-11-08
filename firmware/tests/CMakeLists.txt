@@ -39,3 +39,15 @@ add_executable(openai_web_search_test openai_web_search_test.cpp
 target_include_directories(openai_web_search_test PRIVATE ../main/hal "${CJSON_DIR}")
 target_compile_features(openai_web_search_test PRIVATE cxx_std_17)
 add_test(NAME openai_web_search_test COMMAND $<TARGET_FILE:openai_web_search_test>)
+
+add_executable(robot_dance_beat_test
+    robot_dance_beat_test.cpp
+)
+
+target_include_directories(robot_dance_beat_test PRIVATE
+    ../main
+)
+
+target_compile_features(robot_dance_beat_test PRIVATE cxx_std_17)
+
+add_test(NAME robot_dance_beat_test COMMAND $<TARGET_FILE:robot_dance_beat_test>)
