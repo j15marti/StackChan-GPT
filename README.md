@@ -4,15 +4,15 @@
 
 This repository contains the official [m5stack/StackChan](https://github.com/m5stack/StackChan) firmware modified to use the **OpenAI API** directly when the **`GPT-Live`** (`Agent.ai`) app is selected on the device, without signing into or activating against the original Xiaozhi / M5Stack AI server.
 
-## Quick Flash (`StackChan-GPT-v1.8.7.bin`)
+## Quick Flash (`StackChan-GPT-v1.8.8.bin`)
 
-A pre-built merged firmware image for the 16 MB ESP32-S3 board ([`StackChan-GPT-v1.8.7.bin`](StackChan-GPT-v1.8.7.bin)) is included in the repository root:
+A pre-built merged firmware image for the 16 MB ESP32-S3 board ([`StackChan-GPT-v1.8.8.bin`](StackChan-GPT-v1.8.8.bin)) is included in the repository root:
 
 ```bash
-esptool.py --chip esp32s3 -p /dev/cu.usbmodem* -b 460800 write_flash 0x0 StackChan-GPT-v1.8.7.bin
+esptool.py --chip esp32s3 -p /dev/cu.usbmodem* -b 460800 write_flash 0x0 StackChan-GPT-v1.8.8.bin
 ```
 
-Before flashing a merged image at `0x0`, make sure your microSD configuration backup is current. The image includes blank gaps over the NVS settings area. The binary contains no API key or Wi-Fi credentials. See [v1.8.7 web search notes](docs/WEB_SEARCH_v1.8.7.md) and [idle camera notes](docs/IDLE_CAMERA_TRACKING_v1.8.7.md).
+Before flashing a merged image at `0x0`, make sure your microSD configuration backup is current. The image includes blank gaps over the NVS settings area. The binary contains no API key or Wi-Fi credentials. See [v1.8.7 web search notes](docs/WEB_SEARCH_v1.8.7.md) and [idle camera notes](docs/IDLE_CAMERA_TRACKING_v1.8.7.md). Wake-word sensitivity improvements landed in **v1.8.8**.
 
 ## Settings persistence (NVS + microSD)
 

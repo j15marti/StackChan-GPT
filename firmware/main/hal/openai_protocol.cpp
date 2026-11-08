@@ -43,10 +43,12 @@ constexpr int kInputSampleRate     = 16000;
 constexpr int kLiveSampleRate      = 24000;
 constexpr int kFrameDurationMs     = OPUS_FRAME_DURATION_MS;  // 60 ms
 constexpr size_t kMaxPrerollFrames = 8;                       // 480 ms pre-roll
-constexpr int kMinSpeechMs         = 240;                     // Minimum 240 ms of speech
-constexpr int kSilenceTimeoutMs    = 840;                     // 840 ms silence ends utterance
-constexpr int kMaxUtteranceMs      = 12000;                   // 12s max utterance
-constexpr int kNoSpeechTimeoutMs   = 10000;                   // 10s active listening window before Standby
+constexpr int kMinSpeechMs           = 180;   // Minimum speech before an utterance is eligible
+constexpr int kSilenceTimeoutMs      = 840;   // Active-listen silence hangover
+constexpr int kStandbySilenceTimeoutMs = 1140;  // Longer hangover so multi-word wake phrases finish
+constexpr int kMaxUtteranceMs        = 12000; // 12s max utterance
+constexpr int kNoSpeechTimeoutMs     = 10000; // 10s active listening window before Standby
+constexpr int kStandbyDigitalGainQ8  = 384;   // 1.5x soft gain (Q8) on Standby wake capture for Whisper
 constexpr size_t kMaxHistoryTurns  = 8;                       // 4 user + 4 assistant turns
 constexpr int kHttpTimeoutMs       = 35000;
 constexpr int kMaxToolRounds       = 3;
@@ -339,15 +341,24 @@ NormalizedText normalize_for_match(const std::string& in)
     return out;
 }
 
+bool is_norm_boundary(const std::string& hay, size_t pos)
+{
+    return pos == 0 || hay[pos - 1] == ' ';
+}
+
+bool is_norm_end_boundary(const std::string& hay, size_t end)
+{
+    return end == hay.size() || hay[end] == ' ';
+}
+
+// Whole-word match in already-normalized text (spaces separate tokens).
 bool find_phrase(const std::string& hay, const std::string& needle, size_t& pos_out)
 {
     if (needle.empty()) return false;
     size_t pos = 0;
     while ((pos = hay.find(needle, pos)) != std::string::npos) {
-        const size_t end    = pos + needle.size();
-        const bool start_ok = pos == 0 || hay[pos - 1] == ' ';
-        const bool end_ok   = end == hay.size() || hay[end] == ' ';
-        if (start_ok && end_ok) {
+        const size_t end = pos + needle.size();
+        if (is_norm_boundary(hay, pos) && is_norm_end_boundary(hay, end)) {
             pos_out = pos;
             return true;
         }
@@ -356,24 +367,170 @@ bool find_phrase(const std::string& hay, const std::string& needle, size_t& pos_
     return false;
 }
 
-// Matches the custom wake word (or "stackchan" / "stack chan") case-insensitively and returns any command
+std::string compact_alnum(const std::string& in)
+{
+    std::string out;
+    out.reserve(in.size());
+    for (unsigned char c : in) {
+        if (c >= 0x80 || std::isalnum(c)) {
+            out.push_back(static_cast<char>(c >= 0x80 ? c : std::tolower(c)));
+        }
+    }
+    return out;
+}
+
+// Maps a match in compacted alnum text back onto the spaced normalized string.
+bool find_compact_phrase(const std::string& hay, const std::string& needle_compact, size_t& pos_out,
+                         size_t& len_out)
+{
+    if (needle_compact.size() < 4) return false;
+
+    std::string compact;
+    std::vector<size_t> compact_to_hay;
+    compact.reserve(hay.size());
+    compact_to_hay.reserve(hay.size());
+    for (size_t i = 0; i < hay.size(); ++i) {
+        unsigned char c = static_cast<unsigned char>(hay[i]);
+        if (c == ' ') continue;
+        compact.push_back(hay[i]);
+        compact_to_hay.push_back(i);
+    }
+    if (needle_compact.size() > compact.size()) return false;
+
+    size_t pos = 0;
+    while ((pos = compact.find(needle_compact, pos)) != std::string::npos) {
+        const size_t end = pos + needle_compact.size();
+        const bool start_ok = pos == 0 || !std::isalnum(static_cast<unsigned char>(compact[pos - 1]));
+        const bool end_ok =
+            end == compact.size() || !std::isalnum(static_cast<unsigned char>(compact[end]));
+        if (start_ok && end_ok) {
+            pos_out = compact_to_hay[pos];
+            len_out = compact_to_hay[end - 1] - pos_out + 1;
+            return true;
+        }
+        ++pos;
+    }
+    return false;
+}
+
+bool edit_distance_le1(const std::string& a, const std::string& b)
+{
+    if (a == b) return true;
+    const size_t na = a.size();
+    const size_t nb = b.size();
+    if (na == 0 || nb == 0) return false;
+    if (na > nb + 1 || nb > na + 1) return false;
+
+    if (na == nb) {
+        int diffs = 0;
+        for (size_t i = 0; i < na; ++i) {
+            if (a[i] != b[i] && ++diffs > 1) return false;
+        }
+        return diffs <= 1;
+    }
+
+    const std::string& longer  = na > nb ? a : b;
+    const std::string& shorter = na > nb ? b : a;
+    size_t i = 0;
+    size_t j = 0;
+    int skips = 0;
+    while (i < longer.size() && j < shorter.size()) {
+        if (longer[i] == shorter[j]) {
+            ++i;
+            ++j;
+        } else {
+            if (++skips > 1) return false;
+            ++i;
+        }
+    }
+    return true;
+}
+
+// Matches the custom wake word (or StackChan variants) case-insensitively and returns any command
 // spoken after it, e.g. "Hey Toby, look left" -> matched "Toby", command "look left".
 bool match_wake_word(const std::string& transcript, const std::string& wake_word, std::string& out_matched,
                      std::string& out_command)
 {
     const NormalizedText norm = normalize_for_match(transcript);
-    const std::string candidates[] = {normalize_for_match(wake_word).text, "stackchan", "stack chan"};
+    if (norm.text.empty()) return false;
+
+    const std::string custom = normalize_for_match(wake_word).text;
+    const std::string custom_compact = compact_alnum(custom);
+
+    std::vector<std::string> candidates;
+    auto add_cand = [&](const std::string& c) {
+        if (c.empty()) return;
+        if (std::find(candidates.begin(), candidates.end(), c) == candidates.end()) {
+            candidates.push_back(c);
+        }
+    };
+    add_cand(custom);
+    if (!custom_compact.empty() && custom_compact != custom) {
+        add_cand(custom_compact);
+    }
+    // Built-in name plus common Whisper mishears / "hey …" friendly spaced forms.
+    // "facetime channel" is a frequent Whisper hallucination of "StackChan".
+    for (const char* c :
+         {"stackchan", "stack chan", "stack chin", "stack shan", "stack chen", "stackchon",
+          "stack chann", "stack channel", "stacked chan", "facetime channel", "face time channel",
+          "face time chan", "hi stackchan", "hey stackchan", "ok stackchan", "okay stackchan",
+          "hey stack channel", "hey facetime channel"}) {
+        add_cand(c);
+    }
+    if (!custom.empty()) {
+        for (const char* prefix : {"hey ", "hi ", "ok ", "okay ", "hello "}) {
+            add_cand(std::string(prefix) + custom);
+            if (!custom_compact.empty()) {
+                add_cand(std::string(prefix) + custom_compact);
+            }
+        }
+    }
 
     size_t best_pos = std::string::npos;
     size_t best_len = 0;
+    auto consider = [&](size_t pos, size_t len) {
+        if (len == 0 || pos == std::string::npos) return;
+        if (best_pos == std::string::npos || pos < best_pos || (pos == best_pos && len > best_len)) {
+            best_pos = pos;
+            best_len = len;
+        }
+    };
+
     for (const auto& cand : candidates) {
         size_t pos = 0;
-        if (find_phrase(norm.text, cand, pos) &&
-            (best_pos == std::string::npos || pos < best_pos || (pos == best_pos && cand.size() > best_len))) {
-            best_pos = pos;
-            best_len = cand.size();
+        if (find_phrase(norm.text, cand, pos)) {
+            consider(pos, cand.size());
+            continue;
+        }
+        // Longer names may be glued by STT ("stackchan" vs "stack chan"); allow compact contains.
+        const std::string cand_compact = compact_alnum(cand);
+        size_t compact_len = 0;
+        if (cand_compact.size() >= 4 && find_compact_phrase(norm.text, cand_compact, pos, compact_len)) {
+            consider(pos, compact_len);
         }
     }
+
+    // Fuzzy single-token fallback for custom names >= 4 chars (one substitution/insertion/deletion).
+    if (best_pos == std::string::npos && custom_compact.size() >= 4) {
+        size_t token_start = 0;
+        while (token_start < norm.text.size()) {
+            while (token_start < norm.text.size() && norm.text[token_start] == ' ') ++token_start;
+            if (token_start >= norm.text.size()) break;
+            size_t token_end = token_start;
+            while (token_end < norm.text.size() && norm.text[token_end] != ' ') ++token_end;
+            const std::string token = norm.text.substr(token_start, token_end - token_start);
+            const std::string token_compact = compact_alnum(token);
+            if (edit_distance_le1(token_compact, custom_compact) ||
+                (custom_compact.size() >= 5 && token_compact.size() >= 4 &&
+                 (token_compact.find(custom_compact) != std::string::npos ||
+                  custom_compact.find(token_compact) != std::string::npos))) {
+                consider(token_start, token_end - token_start);
+                break;
+            }
+            token_start = token_end;
+        }
+    }
+
     if (best_pos == std::string::npos) {
         return false;
     }
@@ -402,6 +559,14 @@ bool match_wake_word(const std::string& transcript, const std::string& wake_word
         }
     }
     return true;
+}
+
+void apply_standby_gain(std::vector<int16_t>& pcm)
+{
+    for (int16_t& s : pcm) {
+        const int32_t v = (static_cast<int32_t>(s) * kStandbyDigitalGainQ8) >> 8;
+        s = static_cast<int16_t>(std::clamp(v, static_cast<int32_t>(-32768), static_cast<int32_t>(32767)));
+    }
 }
 
 bool perform_http_json_post(const std::string& url, const std::string& api_key, const std::string& json_body,
@@ -760,23 +925,34 @@ bool OpenaiProtocol::SendAudio(std::unique_ptr<AudioStreamPacket> packet)
     const int rms      = compute_rms(packet->pcm);
     const bool afe_vad = Application::GetInstance().IsVoiceDetected();
 
-    // Maintain a running baseline of ambient noise RMS (CoreS3 ES7210 @ 60dB gain has ~220-450 idle floor)
-    static int s_noise_floor_rms = 380;
-    if (!afe_vad && rms < 620) {
-        s_noise_floor_rms = std::clamp((s_noise_floor_rms * 7 + rms) / 8, 120, 480);
+    // Running ambient noise floor. CoreS3 ES7210 idle is typically ~180-400 RMS after AFE.
+    // Prior max(560, floor*1.5) rejected soft/near wake speech before Whisper ever ran.
+    static int s_noise_floor_rms = 260;
+    const int floor_update_cap   = standby_capture ? 400 : 520;
+    if (!afe_vad && rms < floor_update_cap) {
+        s_noise_floor_rms = std::clamp((s_noise_floor_rms * 7 + rms) / 8, 60, 360);
     }
-    const int dynamic_rms_threshold = std::max(560, (s_noise_floor_rms * 3) / 2);
-    const bool voice_frame          = (rms >= dynamic_rms_threshold) || (afe_vad && rms >= s_noise_floor_rms + 130);
+    // Standby: low absolute floor + modest rise above noise. Active: slightly stricter.
+    const int dynamic_rms_threshold =
+        standby_capture ? std::max(160, s_noise_floor_rms + 55)
+                        : std::max(240, (s_noise_floor_rms * 5) / 4);
+    const int vad_margin   = standby_capture ? 40 : 80;
+    const bool voice_frame = (rms >= dynamic_rms_threshold) ||
+                             (afe_vad && rms >= s_noise_floor_rms + vad_margin);
 
     static int s_log_counter = 0;
-    if (!standby_capture && ++s_log_counter >= 25) {  // Log every ~1.5s
+    if (++s_log_counter >= (standby_capture ? 40 : 25)) {  // ~2.4s standby / ~1.5s active
         s_log_counter = 0;
-        ESP_LOGI(TAG, "Mic status: rms=%d, noise_floor=%d, thr=%d, afe_vad=%d, speech_detected=%d, speech_ms=%d",
-                 rms, s_noise_floor_rms, dynamic_rms_threshold, afe_vad, speech_detected_, speech_ms_);
+        ESP_LOGI(TAG,
+                 "Mic status: rms=%d, noise_floor=%d, thr=%d, afe_vad=%d, speech_detected=%d, "
+                 "speech_ms=%d, standby=%d",
+                 rms, s_noise_floor_rms, dynamic_rms_threshold, afe_vad, speech_detected_, speech_ms_,
+                 standby_capture);
     }
 
     bool trigger_process = false;
     bool trigger_timeout = false;
+    const int silence_timeout = standby_capture ? kStandbySilenceTimeoutMs : kSilenceTimeoutMs;
 
     {
         std::lock_guard<std::mutex> lock(audio_mutex_);
@@ -786,12 +962,18 @@ bool OpenaiProtocol::SendAudio(std::unique_ptr<AudioStreamPacket> packet)
                 speech_ms_       = kFrameDurationMs;
                 silence_ms_      = 0;
                 for (auto& frame : preroll_frames_) {
+                    if (standby_capture) {
+                        apply_standby_gain(frame);
+                    }
                     utterance_pcm_.insert(utterance_pcm_.end(), frame.begin(), frame.end());
                 }
                 preroll_frames_.clear();
+                if (standby_capture) {
+                    apply_standby_gain(packet->pcm);
+                }
                 utterance_pcm_.insert(utterance_pcm_.end(), packet->pcm.begin(), packet->pcm.end());
-                ESP_LOGI(TAG, "Speech start detected (rms=%d, afe_vad=%d, standby=%d)", rms, afe_vad,
-                         standby_capture);
+                ESP_LOGI(TAG, "Speech start detected (rms=%d, thr=%d, afe_vad=%d, standby=%d)", rms,
+                         dynamic_rms_threshold, afe_vad, standby_capture);
             } else {
                 preroll_frames_.push_back(std::move(packet->pcm));
                 if (preroll_frames_.size() > kMaxPrerollFrames) {
@@ -805,6 +987,9 @@ bool OpenaiProtocol::SendAudio(std::unique_ptr<AudioStreamPacket> packet)
                 }
             }
         } else {
+            if (standby_capture) {
+                apply_standby_gain(packet->pcm);
+            }
             utterance_pcm_.insert(utterance_pcm_.end(), packet->pcm.begin(), packet->pcm.end());
             if (voice_frame) {
                 speech_ms_ += kFrameDurationMs;
@@ -815,7 +1000,7 @@ bool OpenaiProtocol::SendAudio(std::unique_ptr<AudioStreamPacket> packet)
 
             const int total_captured_ms = speech_ms_ + silence_ms_;
             const bool auto_stop        = standby_capture || listening_mode_ == kListeningModeAutoStop;
-            if ((auto_stop && silence_ms_ >= kSilenceTimeoutMs) || total_captured_ms >= kMaxUtteranceMs) {
+            if ((auto_stop && silence_ms_ >= silence_timeout) || total_captured_ms >= kMaxUtteranceMs) {
                 if (speech_ms_ >= kMinSpeechMs) {
                     ready_pcm_ = std::move(utterance_pcm_);
                     utterance_pcm_.clear();

@@ -224,18 +224,9 @@ index 03e2baa..bc5aaf0 100644
  
  void AudioCodec::SetOutputVolume(int volume) {
 diff --git a/main/audio/audio_codec.h b/main/audio/audio_codec.h
-index a267dbb..30c3d78 100644
+index a267dbb..cdca676 100644
 --- a/main/audio/audio_codec.h
 +++ b/main/audio/audio_codec.h
-@@ -12,7 +12,7 @@
- 
- #include "board.h"
- 
--#define AUDIO_CODEC_DMA_DESC_NUM 6
-+#define AUDIO_CODEC_DMA_DESC_NUM 12
- #define AUDIO_CODEC_DMA_FRAME_NUM 240
- 
- // ESP-IDF 6 removed i2s_port_t and changed i2s_chan_config_t::id to an integer.
 @@ -61,7 +61,7 @@ protected:
      int output_sample_rate_ = 0;
      int input_channels_ = 1;
@@ -246,7 +237,7 @@ index a267dbb..30c3d78 100644
  
      virtual int Read(int16_t* dest, int samples) = 0;
 diff --git a/main/audio/audio_service.cc b/main/audio/audio_service.cc
-index 7f7582b..0845dcd 100644
+index 7f7582b..0972f62 100644
 --- a/main/audio/audio_service.cc
 +++ b/main/audio/audio_service.cc
 @@ -1,6 +1,10 @@
@@ -274,7 +265,7 @@ index 7f7582b..0845dcd 100644
              vTaskDelete(NULL);
          },
 -        "audio_output", 2048 * 2, this, 4, &audio_output_task_handle_);
-+        "audio_output", 2048 * 3, this, 9, &audio_output_task_handle_, 1);
++        "audio_output", 2048 * 2, this, 9, &audio_output_task_handle_, 1);
  #else
      /* Start the audio input task */
      xTaskCreate(
@@ -646,7 +637,7 @@ index 7f7582b..0845dcd 100644
      return audio_decode_queue_.empty() && audio_playback_queue_.empty() && !decode_in_flight_ &&
             !output_in_flight_;
 diff --git a/main/audio/audio_service.h b/main/audio/audio_service.h
-index f8b510f..f0b5b86 100644
+index f8b510f..c1832b4 100644
 --- a/main/audio/audio_service.h
 +++ b/main/audio/audio_service.h
 @@ -39,8 +39,8 @@
@@ -655,7 +646,7 @@ index f8b510f..f0b5b86 100644
  #define MAX_ENCODE_TASKS_IN_QUEUE 2
 -#define MAX_PLAYBACK_TASKS_IN_QUEUE 2
 -#define MAX_DECODE_PACKETS_IN_QUEUE (1200 / OPUS_FRAME_DURATION_MS)
-+#define MAX_PLAYBACK_TASKS_IN_QUEUE 120
++#define MAX_PLAYBACK_TASKS_IN_QUEUE 48
 +#define MAX_DECODE_PACKETS_IN_QUEUE (2400 / OPUS_FRAME_DURATION_MS)
  #define MAX_SEND_PACKETS_IN_QUEUE (2400 / OPUS_FRAME_DURATION_MS)
  #define AUDIO_TESTING_MAX_DURATION_MS 10000
@@ -708,6 +699,25 @@ index f8b510f..f0b5b86 100644
      bool IsPlaybackDrainedLocked() const;
      bool MarkPlaybackDrainedLocked();
  };
+diff --git a/main/audio/engines/afe_audio_engine.cc b/main/audio/engines/afe_audio_engine.cc
+index 3823d10..9af2c67 100644
+--- a/main/audio/engines/afe_audio_engine.cc
++++ b/main/audio/engines/afe_audio_engine.cc
+@@ -149,11 +149,12 @@ bool AfeAudioEngine::Initialize(AudioCodec* codec, int frame_duration_ms,
+ 
+     afe_config->aec_init = codec_->input_reference();
+     afe_config->aec_mode = AEC_MODE_FD_LOW_COST;
+-    afe_config->aec_nlp_level = AEC_NLP_LEVEL_VERYAGGR;
++    // Milder NLP than VERYAGGR so soft near-field speech survives when AEC is later enabled.
++    afe_config->aec_nlp_level = AEC_NLP_LEVEL_AGGR;
+     afe_config->ns_init = false;
+     afe_config->vad_init = kUseAfeForVoiceProcessing;
+     afe_config->vad_mode = VAD_MODE_0;
+-    afe_config->vad_min_noise_ms = 100;
++    afe_config->vad_min_noise_ms = 80;
+     if (vad_model_name != nullptr) {
+         afe_config->vad_model_name = vad_model_name;
+     }
 diff --git a/main/boards/common/esp_video.cc b/main/boards/common/esp_video.cc
 index 2f31a49..4cf6f63 100644
 --- a/main/boards/common/esp_video.cc
