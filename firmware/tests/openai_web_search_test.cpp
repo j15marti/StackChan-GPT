@@ -38,6 +38,10 @@ int main()
         check(cJSON_GetObjectItem(fn, "parameters") != nullptr, "tool schema");
         cJSON_Delete(root);
     }
+    root = make_hosted_tool();
+    check(std::string(cJSON_GetObjectItem(root, "type")->valuestring) == "web_search", "hosted tool type");
+    check(cJSON_IsTrue(cJSON_GetObjectItem(root, "external_web_access")), "hosted live access");
+    cJSON_Delete(root);
     // Search items need not come first, and there may be several text blocks.
     const std::string good = R"json({"status":"completed","output":[{"type":"reasoning"},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"News from NASA.","annotations":[{"type":"url_citation","title":"NASA","start_index":5,"end_index":9,"url":"https://www.nasa.gov/news/"},{"type":"url_citation","title":"duplicate","url":"https://www.nasa.gov/news/"},{"type":"url_citation","url":"javascript:alert(1)"}]},{"type":"output_text","text":"Second paragraph."}]},{"type":"web_search_call","status":"completed"}]})json";
     auto parsed = parse_response(good);
@@ -52,10 +56,9 @@ int main()
     auto no_search = good;
     no_search.replace(no_search.find("web_search_call"), 15, "some_other_call");
     check(!succeeded(parse_response(no_search)), "reject answer without actual search");
-    auto no_source = good;
-    size_t at = 0;
-    while ((at = no_source.find("url_citation", at)) != std::string::npos) no_source.replace(at, 12, "other_source");
-    check(!succeeded(parse_response(no_source)), "reject unsourced answer");
+    // Weather/sports feeds can complete without URL citations.
+    const std::string weather = R"json({"status":"completed","output":[{"type":"web_search_call","status":"completed"},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"It is 72F and sunny in Los Angeles."}]}]})json";
+    check(succeeded(parse_response(weather)), "accept completed search without URL citations");
     check(!succeeded(error_result("quote \" newline\n")), "escape error strings");
     std::cout << "Web search request, parsing, failure and source checks passed.\n";
 }

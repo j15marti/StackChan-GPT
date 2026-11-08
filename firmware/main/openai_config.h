@@ -94,7 +94,9 @@
     "Keep your spoken responses concise, warm, and natural for voice conversation (1 to 3 short sentences). "          \
     "Actively use your tools when asked to move/look/nod/shake/dance, change your LED light colors, take a photo, "    \
     "set reminders, or adjust volume/brightness. You may also proactively use gestures, head movements, or LED "       \
-    "colors to make your reactions lively!"
+    "colors to make your reactions lively! "                                                                           \
+    "When the user asks about news, weather, sports scores, local businesses, current events, or other live facts, "  \
+    "use web search (self__web__search or hosted web_search) instead of guessing from training data."
 #endif
 
 /**

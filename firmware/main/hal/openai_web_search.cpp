@@ -25,8 +25,8 @@ cJSON* make_tool(bool flat_format)
     cJSON* fn = cJSON_CreateObject();
     cJSON_AddStringToObject(fn, "name", kToolName);
     cJSON_AddStringToObject(fn, "description",
-        "Search the live web for news, weather, current facts, events, and public website information. "
-        "Use this whenever freshness matters or the user asks to search online. "
+        "Search the live web for news, weather, sports scores, local businesses, current facts, events, "
+        "and public website information. Use this whenever freshness matters or the user asks to look online. "
         "Provide a self-contained query including the topic, location and requested date range. "
         "Returns a sourced answer or an explicit error; never claim a failed search succeeded.");
     cJSON* schema = cJSON_Parse(R"({"type":"object","properties":{"query":{"type":"string","description":"Self-contained web question, including location and date range when relevant."}},"required":["query"],"additionalProperties":false})");
@@ -39,6 +39,15 @@ cJSON* make_tool(bool flat_format)
     cJSON_AddStringToObject(wrapper, "type", "function");
     cJSON_AddItemToObject(wrapper, "function", fn);
     return wrapper;
+}
+
+cJSON* make_hosted_tool()
+{
+    cJSON* search = cJSON_CreateObject();
+    cJSON_AddStringToObject(search, "type", "web_search");
+    cJSON_AddStringToObject(search, "search_context_size", "low");
+    cJSON_AddBoolToObject(search, "external_web_access", true);
+    return search;
 }
 
 bool make_request(const std::string& arguments, const std::string& model,
@@ -65,11 +74,7 @@ bool make_request(const std::string& arguments, const std::string& model,
     if (!utc_date.empty()) query = "Current UTC date: " + utc_date + "\n" + query;
     cJSON_AddStringToObject(root, "input", query.c_str());
     cJSON* tools = cJSON_CreateArray();
-    cJSON* search = cJSON_CreateObject();
-    cJSON_AddStringToObject(search, "type", "web_search");
-    cJSON_AddStringToObject(search, "search_context_size", "low");
-    cJSON_AddBoolToObject(search, "external_web_access", true);
-    cJSON_AddItemToArray(tools, search);
+    cJSON_AddItemToArray(tools, make_hosted_tool());
     cJSON_AddItemToObject(root, "tools", tools);
     cJSON_AddStringToObject(root, "tool_choice", "required");
     request = stringify(root);
@@ -138,11 +143,12 @@ std::string parse_response(const std::string& body)
         }
     }
     cJSON_Delete(root);
-    // Do not pass an unsourced answer off as verified live information.
-    if (!searched || answer.empty() || urls.empty() || answer.size() > 12000) {
+    // Weather/sports/finance feeds may complete a search without url_citation annotations.
+    // Require a completed web_search_call plus speakable text; keep URLs when present.
+    if (!searched || answer.empty() || answer.size() > 12000) {
         cJSON_Delete(sources);
         cJSON_Delete(citations);
-        return error_result("Web search returned no complete, source-linked answer. Please try a more specific question.");
+        return error_result("Web search returned no complete answer. Please try a more specific question.");
     }
     cJSON* result = cJSON_CreateObject();
     cJSON_AddBoolToObject(result, "ok", true);

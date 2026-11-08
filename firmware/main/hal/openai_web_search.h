@@ -8,6 +8,8 @@ namespace openai_web_search {
 constexpr const char* kToolName = "self__web__search";
 constexpr const char* kMcpName = "self.web.search";
 cJSON* make_tool(bool flat_format);
+// Hosted Responses/Live tool: { "type": "web_search", "external_web_access": true }.
+cJSON* make_hosted_tool();
 bool make_request(const std::string& arguments, const std::string& model,
                   const std::string& utc_date, std::string& request, std::string& error);
 std::string error_result(const std::string& error);
