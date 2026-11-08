@@ -69,6 +69,17 @@ Write a JSON command to BLE Characteristic `e2e5e5e3-1234-5678-1234-56789abcdef0
 }
 ```
 
+### Method 4: microSD backup / restore (survives full `0x0` flash)
+On every save of Wi-Fi or OpenAI settings, firmware writes `/sdcard/stackchan_config.json` when a card is mounted (GPIO35 is remuxed safely around LCD D/C for the session). You can also drop a one-line key in `/sdcard/openai_key.txt` or `/sdcard/api_key.txt`.
+
+On boot (`hal_openai::apply_boot_defaults` → `restore_from_sd_card`):
+
+1. Empty NVS + SD backup present → restore Wi-Fi / OpenAI fields into NVS.
+2. NVS populated + SD missing/outdated → snapshot NVS back to the card.
+3. Empty NVS never clobbers an existing good SD backup.
+
+**Flashing tip:** `idf.py flash` (app partition only) preserves NVS at `0x9000`. Flashing the merged `StackChan-GPT-v*.bin` at `0x0` (or M5Burner full erase) wipes NVS — leave the microSD in so settings come back on the next boot.
+
 ---
 
 ## Build & Flash Instructions

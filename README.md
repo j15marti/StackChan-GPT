@@ -14,6 +14,42 @@ esptool.py --chip esp32s3 -p /dev/cu.usbmodem* -b 460800 write_flash 0x0 StackCh
 
 Before flashing a merged image at `0x0`, make sure your microSD configuration backup is current. The image includes blank gaps over the NVS settings area. The binary contains no API key or Wi-Fi credentials. See [v1.8.7 web search notes](docs/WEB_SEARCH_v1.8.7.md) and [idle camera notes](docs/IDLE_CAMERA_TRACKING_v1.8.7.md).
 
+## Settings persistence (NVS + microSD)
+
+Wi-Fi credentials and OpenAI settings (API key, base URL, models, TTS voice, system prompt, wake word) live in **NVS** on the ESP32 and are mirrored to the microSD card whenever they change (web portal, on-device UI, BLE, or a successful Wi-Fi connect).
+
+| Path | Role |
+|------|------|
+| NVS (`openai`, Wi-Fi SSID manager) | Primary runtime store |
+| `/sdcard/stackchan_config.json` | Full backup (Wi-Fi list + OpenAI fields) |
+| `/sdcard/openai_key.txt` or `/sdcard/api_key.txt` | Optional plain-text API key import / mirror |
+
+**Boot sync:** if NVS is empty after a wipe but the SD card has a backup → restore into NVS. If NVS has settings and the card is missing or stale → write NVS → SD. Empty NVS never overwrites a good SD backup.
+
+**Flash modes:**
+
+- **App-only flash** (`idf.py flash` / write starting at the OTA app partition, typically `0x20000`) **keeps NVS** at `0x9000` — settings survive without an SD card.
+- **Full merged image at `0x0`** (M5Burner / `esptool write_flash 0x0 StackChan-GPT-v*.bin`) **wipes NVS**. Keep a microSD inserted with a current `stackchan_config.json` so the next boot can restore Wi-Fi and the API key.
+
+Example `stackchan_config.json` schema (do not commit real secrets):
+
+```json
+{
+  "version": 1,
+  "wifi": [{ "ssid": "YourNetwork", "password": "..." }],
+  "openai": {
+    "api_key": "sk-...",
+    "base_url": "https://api.openai.com/v1",
+    "chat_model": "gpt-4o-mini",
+    "stt_model": "whisper-1",
+    "tts_model": "tts-1",
+    "tts_voice": "nova",
+    "sys_prompt": "...",
+    "wake_word": "StackChan"
+  }
+}
+```
+
 ## Highlights (`v1.8.7`)
 
 - **Live web search**: News, weather, sports scores, local businesses, and current facts via OpenAI Responses `web_search`. HTTP chat uses `self__web__search` → `/v1/responses`; GPT-Live also gets hosted `web_search` in Responses delegation. Setup portal **Latest web search and source links** shows citations. Weather/sports answers without URL citations are accepted.
@@ -29,7 +65,7 @@ Before flashing a merged image at `0x0`, make sure your microSD configuration ba
   - Uses OpenAI `/v1/audio/transcriptions` (`whisper-1` / `gpt-4o-mini-transcribe`), `/v1/chat/completions` (`gpt-4o-mini` / `gpt-4o` with function calling), `/v1/audio/speech` (`tts-1` streaming Ogg Opus), and OpenAI Vision for the built-in camera.
   - Supports `"Hi StackChan"` hardware WakeNet9 plus custom wake words (e.g., `"Hey Jarvis"`, `"Computer"`) with Whisper speech verification.
 - **Automatic microSD Card Backup & Restore**:
-  - Automatically backs up and restores Wi-Fi networks, OpenAI API key, voice/model preferences, custom wake word, and reminders to `/sdcard/stackchan_config.json` so settings survive full flash erases (`0x0` reflashes).
+  - Automatically backs up and restores Wi-Fi networks, OpenAI API key, voice/model preferences, and custom wake word to `/sdcard/stackchan_config.json` (plus optional `/sdcard/openai_key.txt`) so settings survive full flash erases (`0x0` reflashes). See **Settings persistence** above.
 - **Full Servo Motor & RGB LED Integration**:
   - Automatic state lighting across all 12 RGB LEDs (Listening = Emerald Green, Thinking = Purple, Speaking = Cyan/Blue, Standby = Off) and natural speaking head movements (`SpeakingModifier` with servo nods/yaw drift + emotion postures).
   - OpenAI Function/Tool Calling controls `self.robot.set_head_angles`, `self.robot.get_head_angles`, `self.robot.perform_gesture` (`nod`, `shake`, `happy_dance`, `robot_dance`, `look_around`, `panic`, `center`), `self.robot.set_led_color`, `self.robot.set_led_side_color`, `self.robot.set_emotion`, `self.camera.take_photo`, reminders, speaker volume, and screen brightness.
