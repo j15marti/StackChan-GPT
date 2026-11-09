@@ -4,15 +4,15 @@
 
 This repository contains the official [m5stack/StackChan](https://github.com/m5stack/StackChan) firmware modified to use the **OpenAI API** directly when the **`GPT-Live`** (`Agent.ai`) app is selected on the device, without signing into or activating against the original Xiaozhi / M5Stack AI server.
 
-## Quick Flash (`StackChan-GPT-v1.8.9.bin`)
+## Quick Flash (`StackChan-GPT-v1.8.10.bin`)
 
-A pre-built merged firmware image for the 16 MB ESP32-S3 board ([`StackChan-GPT-v1.8.9.bin`](StackChan-GPT-v1.8.9.bin)) is included in the repository root:
+A pre-built merged firmware image for the 16 MB ESP32-S3 board ([`StackChan-GPT-v1.8.10.bin`](StackChan-GPT-v1.8.10.bin)) is included in the repository root:
 
 ```bash
-esptool.py --chip esp32s3 -p /dev/cu.usbmodem* -b 460800 write_flash 0x0 StackChan-GPT-v1.8.9.bin
+esptool.py --chip esp32s3 -p /dev/cu.usbmodem* -b 460800 write_flash 0x0 StackChan-GPT-v1.8.10.bin
 ```
 
-Before flashing a merged image at `0x0`, make sure your microSD configuration backup is current. The image includes blank gaps over the NVS settings area. The binary contains no API key or Wi-Fi credentials. See [v1.8.9 dance notes](docs/DANCE_v1.8.9.md), [v1.8.7 web search notes](docs/WEB_SEARCH_v1.8.7.md), and [idle camera notes](docs/IDLE_CAMERA_TRACKING_v1.8.7.md). Beat-synced music dance landed in **v1.8.9**.
+Before flashing a merged image at `0x0`, make sure your microSD configuration backup is current. The image includes blank gaps over the NVS settings area. The binary contains no API key or Wi-Fi credentials. See [v1.8.9 dance notes](docs/DANCE_v1.8.9.md), [v1.8.7 web search notes](docs/WEB_SEARCH_v1.8.7.md), and [idle camera notes](docs/IDLE_CAMERA_TRACKING_v1.8.7.md).
 
 ## Settings persistence (NVS + microSD)
 
@@ -50,7 +50,9 @@ Example `stackchan_config.json` schema (do not commit real secrets):
 }
 ```
 
-## Highlights (`v1.8.9`)
+## Highlights (`v1.8.10`)
+
+- **Lower-latency OpenAI voice output**: Non-live models now request OpenAI Speech API audio as raw 24 kHz PCM and stream it directly to the CoreS3 speaker. This removes Ogg demuxing and Opus decoding. GPT-Live continues to use OpenAI's direct speech-to-speech PCM stream.
 
 - **Beat-synced music dance**: Say “dance” / “dance to the music” to call `self.robot.dance`. Mic PCM onset energy estimates BPM (default 120), then the head alternates up/down for 16 beats and right/left for 16, while left/right neon halves flash red → blue → green → purple. Default duration **45 s** (`stop=true` ends early). Listening/thinking LEDs are overridden for the dance. See [docs/DANCE_v1.8.9.md](docs/DANCE_v1.8.9.md).
 
@@ -66,7 +68,7 @@ Example `stackchan_config.json` schema (do not commit real secrets):
   - Selecting **`GPT-Live`** launches the on-device OpenAI voice and response engine (`OpenaiProtocol`).
   - Configure your OpenAI API key, model, TTS voice (`nova`, `alloy`, `shimmer`, `echo`, `fable`, `onyx`, `coral`, `ash`, `sage`), custom wake word, and system prompt via the built-in QR Code / Local Web Portal (`SETUP -> GPT-Live -> OpenAI API`), microSD card (`stackchan_config.json`), BLE, or compile-time headers.
 - **Direct OpenAI API Integration (No Original Server Sign-In)**:
-  - Uses OpenAI `/v1/audio/transcriptions` (`whisper-1` / `gpt-4o-mini-transcribe`), `/v1/chat/completions` (`gpt-4o-mini` / `gpt-4o` with function calling), `/v1/audio/speech` (`tts-1` streaming Ogg Opus), and OpenAI Vision for the built-in camera.
+  - Uses OpenAI `/v1/audio/transcriptions` (`whisper-1` / `gpt-4o-mini-transcribe`), `/v1/chat/completions` (`gpt-4o-mini` / `gpt-4o` with function calling), `/v1/audio/speech` (low-latency raw PCM streaming), and OpenAI Vision for the built-in camera.
   - Supports `"Hi StackChan"` hardware WakeNet9 plus custom wake words (e.g., `"Hey Jarvis"`, `"Computer"`) with Whisper speech verification.
 - **Automatic microSD Card Backup & Restore**:
   - Automatically backs up and restores Wi-Fi networks, OpenAI API key, voice/model preferences, and custom wake word to `/sdcard/stackchan_config.json` (plus optional `/sdcard/openai_key.txt`) so settings survive full flash erases (`0x0` reflashes). See **Settings persistence** above.

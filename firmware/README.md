@@ -1,6 +1,6 @@
 # StackChan-GPT Firmware (`Agent.ai` + OpenAI API)
 
-Modified M5Stack **StackChan** firmware (`ESP32-S3` / `M5Stack CoreS3`) that replaces the original cloud-bound AI backend with a **direct, on-device OpenAI API integration** (`Whisper STT` + `Chat Completions with Function/Tool Calling` + `OpenAI Opus Streaming TTS` + `OpenAI Vision`), while preserving compatibility with the **StackChan World** iOS app, Feetech SCS **servo motors**, and **12 RGB neon LEDs**.
+Modified M5Stack **StackChan** firmware (`ESP32-S3` / `M5Stack CoreS3`) that replaces the original cloud-bound AI backend with a **direct, on-device OpenAI API integration** (`Whisper STT` + `Chat Completions with Function/Tool Calling` + low-latency OpenAI PCM voice streaming + `OpenAI Vision`), while preserving compatibility with the **StackChan World** iOS app, Feetech SCS **servo motors**, and **12 RGB neon LEDs**.
 
 ---
 
@@ -14,7 +14,7 @@ Modified M5Stack **StackChan** firmware (`ESP32-S3` / `M5Stack CoreS3`) that rep
    - **Wake Word & Tap-to-Talk**: Say `"Hi StackChan"` (ESP-SR WakeNet9) or tap StackChan's face to start talking.
    - **Speech-to-Text (`POST /v1/audio/transcriptions`)**: Captures 16 kHz, 16-bit mono PCM from the 4-mic array (`ES7210`) with hardware AFE beamforming, echo cancellation, and VAD, and sends WAV audio to OpenAI (`whisper-1` / `gpt-4o-mini-transcribe`).
    - **Chat Completions + Tool Calling (`POST /v1/chat/completions`)**: Sends conversation history and all hardware MCP tools to OpenAI (`gpt-4o-mini` / `gpt-4o`).
-   - **Streaming Text-to-Speech (`POST /v1/audio/speech`)**: Streams `opus` audio from OpenAI TTS (`tts-1`, voice `nova`/`alloy`/`shimmer`/`echo`/`fable`/`onyx`/`coral`/`ash`/`sage`) through `OggDemuxer` directly to the `AW88298` speaker.
+   - **Low-Latency OpenAI Voice (`POST /v1/audio/speech`)**: Requests raw 24 kHz PCM from OpenAI TTS (`tts-1` or a configured compatible model) and streams it directly to the `AW88298` speaker, avoiding Ogg demuxing and Opus decoding. `GPT-Live` uses OpenAI's direct speech-to-speech PCM stream.
 3. **Servo Motors, Facial Expressions & RGB LED Integration**:
    - **Automatic State Feedback**:
      - **Listening**: All 12 RGB LEDs glow emerald green (`0, 75, 25`) and the pitch servo tilts up attentively.

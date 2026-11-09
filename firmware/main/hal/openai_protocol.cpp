@@ -16,7 +16,6 @@
 #include <board.h>
 #include <display.h>
 #include <mcp_server.h>
-#include <ogg_demuxer.h>
 #include <jpg/image_to_jpeg.h>
 #include <stackchan/stackchan.h>
 #include <mooncake_log.h>
@@ -2472,7 +2471,11 @@ bool OpenaiProtocol::StreamTtsAudio(const std::string& text, std::string& out_er
     cJSON_AddStringToObject(req, "model", tts_model.c_str());
     cJSON_AddStringToObject(req, "input", text.c_str());
     cJSON_AddStringToObject(req, "voice", cfg.ttsVoice.c_str());
-    cJSON_AddStringToObject(req, "response_format", "opus");
+    // OpenAI recommends raw PCM for the fastest streaming response. PCM also
+    // avoids Ogg parsing and Opus decoding on the ESP32-S3. The Speech API
+    // returns 24 kHz, 16-bit signed little-endian mono samples.
+    cJSON_AddStringToObject(req, "response_format", "pcm");
+    cJSON_AddStringToObject(req, "stream_format", "audio");
 
     std::string req_body = json_to_string(req);
     cJSON_Delete(req);
@@ -2493,6 +2496,7 @@ bool OpenaiProtocol::StreamTtsAudio(const std::string& text, std::string& out_er
     std::string auth_hdr = "Bearer " + cfg.apiKey;
     esp_http_client_set_header(client, "Authorization", auth_hdr.c_str());
     esp_http_client_set_header(client, "Content-Type", "application/json");
+    esp_http_client_set_header(client, "Accept", "application/octet-stream");
 
     esp_err_t err = esp_http_client_open(client, req_body.size());
     if (err != ESP_OK) {
@@ -2519,36 +2523,66 @@ bool OpenaiProtocol::StreamTtsAudio(const std::string& text, std::string& out_er
     }
 
     auto& audio_svc = Application::GetInstance().GetAudioService();
-    size_t opus_packets = 0;
-    OggDemuxer demuxer;
-    demuxer.OnPacket([this, &audio_svc, &opus_packets](const uint8_t* data, int sample_rate, int frame_duration_ms,
-                                                       size_t len) {
-        if (abort_requested_.load()) return;
-        auto packet            = std::make_unique<AudioStreamPacket>();
-        packet->sample_rate    = sample_rate;
-        packet->frame_duration = frame_duration_ms;
-        packet->payload.assign(data, data + len);
-        audio_svc.PushPacketToDecodeQueue(std::move(packet), true);
-        ++opus_packets;
-    });
-    demuxer.Reset();
-
+    constexpr size_t kPcmSamplesPerChunk = kLiveSampleRate * kFrameDurationMs / 1000;  // 60 ms
+    constexpr size_t kPcmBytesPerChunk   = kPcmSamplesPerChunk * sizeof(int16_t);
     std::vector<uint8_t> buf(4096);
+    std::vector<uint8_t> pending_pcm;
+    pending_pcm.reserve(kPcmBytesPerChunk + buf.size());
     size_t total_bytes = 0;
+    size_t pcm_chunks   = 0;
+    bool read_failed    = false;
     while (!abort_requested_.load()) {
         int r = esp_http_client_read(client, reinterpret_cast<char*>(buf.data()), buf.size());
-        if (r <= 0) {
+        if (r == 0) {
+            break;
+        }
+        if (r < 0) {
+            out_error  = std::string("TTS stream read failed: ") + esp_err_to_name(static_cast<esp_err_t>(r));
+            read_failed = true;
             break;
         }
         total_bytes += r;
-        demuxer.Process(buf.data(), static_cast<size_t>(r));
+        pending_pcm.insert(pending_pcm.end(), buf.begin(), buf.begin() + r);
+
+        size_t consumed = 0;
+        while (pending_pcm.size() - consumed >= kPcmBytesPerChunk) {
+            std::vector<int16_t> pcm(kPcmSamplesPerChunk);
+            std::memcpy(pcm.data(), pending_pcm.data() + consumed, kPcmBytesPerChunk);
+            if (!audio_svc.PushPcmToPlaybackQueue(std::move(pcm), kLiveSampleRate, true)) {
+                out_error  = "TTS PCM playback queue stopped";
+                read_failed = true;
+                break;
+            }
+            consumed += kPcmBytesPerChunk;
+            ++pcm_chunks;
+        }
+        if (consumed > 0) {
+            pending_pcm.erase(pending_pcm.begin(), pending_pcm.begin() + consumed);
+        }
+        if (read_failed) {
+            break;
+        }
+    }
+
+    // Flush the final partial frame. Ignore one impossible trailing byte rather
+    // than reading beyond the final complete little-endian PCM sample.
+    const size_t tail_bytes = pending_pcm.size() & ~size_t{1};
+    if (!read_failed && !abort_requested_.load() && tail_bytes > 0) {
+        std::vector<int16_t> pcm(tail_bytes / sizeof(int16_t));
+        std::memcpy(pcm.data(), pending_pcm.data(), tail_bytes);
+        if (!audio_svc.PushPcmToPlaybackQueue(std::move(pcm), kLiveSampleRate, true)) {
+            out_error  = "TTS PCM tail queue stopped";
+            read_failed = true;
+        } else {
+            ++pcm_chunks;
+        }
     }
     audio_svc.NotifyStreamComplete();
 
-    ESP_LOGI(TAG, "TTS stream complete: %u bytes, %u opus packets", static_cast<unsigned>(total_bytes),
-             static_cast<unsigned>(opus_packets));
+    ESP_LOGI(TAG, "OpenAI PCM voice stream complete: %u bytes, %u chunks",
+             static_cast<unsigned>(total_bytes), static_cast<unsigned>(pcm_chunks));
 
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
-    return true;
+    return !read_failed;
 }
