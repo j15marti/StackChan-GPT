@@ -301,20 +301,23 @@ void StackChanAvatarDisplay::LvglUnlock()
 void StackChanAvatarDisplay::CreateIdleMotionModifier()
 {
     auto& stackchan = GetStackChan();
+    idle_motion_level_ = hal_bridge::get_xiaozhi_config().idleRandomMovementLevel;
 
     switch (idle_motion_level_) {
-        case 0:
+        case 0:  // None: no rest-period movement
             idle_motion_modifier_id_ = -1;
             return;
-        case 1:
-            idle_motion_modifier_id_ = stackchan.addModifier(std::make_unique<IdleMotionModifier>(8000, 12000));
+        case 1:  // Little: brief movement every 5 minutes (300,000 ms) for no more than 10 seconds (10,000 ms)
+            idle_motion_modifier_id_ =
+                stackchan.addModifier(std::make_unique<IdleMotionModifier>(2500, 4500, 300000, 10000));
             return;
-        case 3:
-            idle_motion_modifier_id_ = stackchan.addModifier(std::make_unique<IdleMotionModifier>(2000, 4000));
+        case 2:  // Medium: brief movement every 3 minutes (180,000 ms) for no more than 20 seconds (20,000 ms)
+            idle_motion_modifier_id_ =
+                stackchan.addModifier(std::make_unique<IdleMotionModifier>(2500, 5000, 180000, 20000));
             return;
-        case 2:
+        case 3:  // High: continuous random idle movement (previous default behavior)
         default:
-            idle_motion_modifier_id_ = stackchan.addModifier(std::make_unique<IdleMotionModifier>());
+            idle_motion_modifier_id_ = stackchan.addModifier(std::make_unique<IdleMotionModifier>(4000, 8000));
             return;
     }
 }
@@ -571,6 +574,7 @@ void StackChanAvatarDisplay::SetStatus(const char* status)
     if (is_idle) {
         // Start idle motion
         ESP_LOGW(TAG, "Start idle motion");
+        idle_motion_level_ = hal_bridge::get_xiaozhi_config().idleRandomMovementLevel;
         if (idle_motion_modifier_id_ < 0) {
             if (idle_motion_level_ > 0) {
                 CreateIdleMotionModifier();

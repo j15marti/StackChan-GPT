@@ -54,6 +54,11 @@ bool IsRobotAtRest()
     if (robot_dance::is_active()) {
         return false;
     }
+    // Only allow continuous idle camera tracking when Movement is set to "High" (level 3).
+    // "None" (0) performs no rest movement, and "Little" (1) / "Medium" (2) use bounded periodic windows.
+    if (hal_bridge::get_xiaozhi_config().idleRandomMovementLevel < 3) {
+        return false;
+    }
 
     auto& app = Application::GetInstance();
     return app.GetDeviceState() == kDeviceStateIdle && app.GetAudioService().IsPlaybackIdle() &&

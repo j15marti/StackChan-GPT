@@ -17,7 +17,7 @@ using namespace setup_workers;
 static std::string _tag = "Setup-AgentAI";
 
 namespace {
-static const std::array<const char*, 4> _idle_motion_level_labels = {{"Off", "Low", "Medium", "High"}};
+static const std::array<const char*, 4> _idle_motion_level_labels = {{"None", "Little", "Medium", "High"}};
 static const std::array<const char*, 11> _openai_voices = {
     {"marin", "cedar", "nova", "alloy", "shimmer", "echo", "fable", "onyx", "coral", "ash", "sage"}};
 static const std::array<const char*, 8> _openai_models = {
@@ -334,7 +334,7 @@ XiaozhiGeneralWorker::XiaozhiGeneralWorker()
     _panel_general->removeFlag(LV_OBJ_FLAG_SCROLLABLE);
 
     _label_idle_motion_title = std::make_unique<Label>(_panel_general->get());
-    _label_idle_motion_title->setText("Idle movement frequency:");
+    _label_idle_motion_title->setText("Movement during rest:");
     _label_idle_motion_title->setTextFont(&lv_font_montserrat_16);
     _label_idle_motion_title->setTextColor(lv_color_hex(0x26206A));
     _label_idle_motion_title->setWidth(260);

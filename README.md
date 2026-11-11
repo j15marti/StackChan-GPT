@@ -4,12 +4,12 @@
 
 This repository contains the official [m5stack/StackChan](https://github.com/m5stack/StackChan) firmware modified to use the **OpenAI API** directly when the **`GPT-Live`** (`Agent.ai`) app is selected on the device, without signing into or activating against the original Xiaozhi / M5Stack AI server.
 
-## Quick Flash (`StackChan-GPT-v1.8.10.bin`)
+## Quick Flash (`StackChan-GPT-v1.8.11.bin`)
 
-A pre-built merged firmware image for the 16 MB ESP32-S3 board ([`StackChan-GPT-v1.8.10.bin`](StackChan-GPT-v1.8.10.bin)) is included in the repository root:
+A pre-built merged firmware image for the 16 MB ESP32-S3 board ([`StackChan-GPT-v1.8.11.bin`](StackChan-GPT-v1.8.11.bin)) is included in the repository root:
 
 ```bash
-esptool.py --chip esp32s3 -p /dev/cu.usbmodem* -b 460800 write_flash 0x0 StackChan-GPT-v1.8.10.bin
+esptool.py --chip esp32s3 -p /dev/cu.usbmodem* -b 460800 write_flash 0x0 StackChan-GPT-v1.8.11.bin
 ```
 
 Before flashing a merged image at `0x0`, make sure your microSD configuration backup is current. The image includes blank gaps over the NVS settings area. The binary contains no API key or Wi-Fi credentials. See [v1.8.9 dance notes](docs/DANCE_v1.8.9.md), [v1.8.7 web search notes](docs/WEB_SEARCH_v1.8.7.md), and [idle camera notes](docs/IDLE_CAMERA_TRACKING_v1.8.7.md).
@@ -50,7 +50,9 @@ Example `stackchan_config.json` schema (do not commit real secrets):
 }
 ```
 
-## Highlights (`v1.8.10`)
+## Highlights (`v1.8.11`)
+
+- **Configurable Rest Movement (`SETUP -> Agent.ai -> Movement`)**: Choose how much head movement StackChan performs during rest periods when no chat input or output is active: **None** (no movement), **Little** (brief movement every 5 minutes for $\le$ 10 seconds), **Medium** (brief movement every 3 minutes for $\le$ 20 seconds), or **High** (continuous idle movement).
 
 - **Lower-latency OpenAI voice output**: Non-live models now request OpenAI Speech API audio as raw 24 kHz PCM and stream it directly to the CoreS3 speaker. This removes Ogg demuxing and Opus decoding. GPT-Live continues to use OpenAI's direct speech-to-speech PCM stream.
 

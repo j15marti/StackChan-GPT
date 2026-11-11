@@ -84,7 +84,7 @@ void AppSetup::onOpen()
                   _need_warm_reset = true;
                   _worker          = std::make_unique<OpenaiSetupWorker>();
               }},
-             {"General",
+             {"Movement",
               [&]() {
                   _destroy_menu    = true;
                   _need_warm_reset = true;

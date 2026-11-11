@@ -19,10 +19,21 @@ namespace stackchan {
  */
 class IdleMotionModifier : public Modifier {
 public:
-    IdleMotionModifier(uint32_t interval_min = 4000, uint32_t interval_max = 8000)
-        : _interval_min(interval_min), _interval_max(interval_max)
+    IdleMotionModifier(uint32_t interval_min = 4000, uint32_t interval_max = 8000, uint32_t burst_period_ms = 0,
+                       uint32_t burst_max_duration_ms = 0)
+        : _interval_min(interval_min),
+          _interval_max(interval_max),
+          _burst_period_ms(burst_period_ms),
+          _burst_max_duration_ms(burst_max_duration_ms)
     {
-        _next_tick = GetHAL().millis() + 1000;  // 启动 1 秒后开始第一次动作
+        const uint32_t now = GetHAL().millis();
+        if (_burst_period_ms > 0 && _burst_max_duration_ms > 0) {
+            // Wait one full rest period (e.g. 5 min for Little, 3 min for Medium) before the first movement window
+            _burst_start_ms = now + _burst_period_ms;
+            _next_tick      = _burst_start_ms;
+        } else {
+            _next_tick = now + 1000;  // 启动 1 秒后开始第一次动作
+        }
     }
 
     void pause()
@@ -32,8 +43,14 @@ public:
     void resume()
     {
         if (_paused) {
-            _paused    = false;
-            _next_tick = GetHAL().millis() + 500;
+            _paused            = false;
+            const uint32_t now = GetHAL().millis();
+            if (_burst_period_ms > 0 && _burst_max_duration_ms > 0) {
+                _burst_start_ms = now + _burst_period_ms;
+                _next_tick      = _burst_start_ms;
+            } else {
+                _next_tick = now + 500;
+            }
         }
     }
 
@@ -43,8 +60,26 @@ public:
 
         uint32_t now = GetHAL().millis();
 
+        if (_burst_period_ms > 0 && _burst_max_duration_ms > 0) {
+            if (static_cast<int32_t>(now - _burst_start_ms) < 0) {
+                return;
+            }
+            const uint32_t elapsed_in_burst = now - _burst_start_ms;
+            if (elapsed_in_burst >= _burst_max_duration_ms) {
+                if (stackchan.motion().isMoving() && !stackchan.motion().isModifyLocked()) {
+                    stackchan.motion().stop();
+                }
+                while (static_cast<int32_t>(now - (_burst_start_ms + _burst_period_ms)) >= 0) {
+                    _burst_start_ms += _burst_period_ms;
+                }
+                _burst_start_ms += _burst_period_ms;
+                _next_tick = _burst_start_ms;
+                return;
+            }
+        }
+
         // 如果时间没到，直接跳过
-        if (now < _next_tick) {
+        if (static_cast<int32_t>(now - _next_tick) < 0) {
             return;
         }
 
@@ -60,6 +95,12 @@ public:
         // 算下一次的时间间隔
         uint32_t delay = Random::getInstance().getInt(_interval_min, _interval_max);
         _next_tick     = now + delay;
+        if (_burst_period_ms > 0 && _burst_max_duration_ms > 0) {
+            const uint32_t burst_end_ms = _burst_start_ms + _burst_max_duration_ms;
+            if (static_cast<int32_t>(_next_tick - burst_end_ms) >= 0) {
+                _next_tick = burst_end_ms;
+            }
+        }
         // mclog::info("next idle motion in {} ms", delay);
     }
 
@@ -114,8 +155,11 @@ private:
 
     uint32_t _interval_min;
     uint32_t _interval_max;
-    uint32_t _next_tick = 0;
-    bool _paused        = false;
+    uint32_t _burst_period_ms       = 0;
+    uint32_t _burst_max_duration_ms = 0;
+    uint32_t _burst_start_ms        = 0;
+    uint32_t _next_tick             = 0;
+    bool _paused                    = false;
 };
 
 }  // namespace stackchan
