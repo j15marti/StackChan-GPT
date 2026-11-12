@@ -1,6 +1,6 @@
-# StackChan-GPT (`GPT-Live` OpenAI Edition)
+# StackChan-GPT (`GPT-Live` OpenAI Integration)
 
-<img src="StackChan-GPT_image.jpeg" width="480" alt="StackChan-GPT">
+<img src="https://github.com/j15marti/StackChan-GPT/blob/main/docs/agent_ai.png?raw=true" width="300" alt="StackChan-GPT">
 
 This repository contains the official [m5stack/StackChan](https://github.com/m5stack/StackChan) firmware modified to use the **OpenAI API** directly when the **`GPT-Live`** (`Agent.ai`) app is selected on the device, without signing into or activating against the original Xiaozhi / M5Stack AI server.
 
@@ -14,6 +14,8 @@ esptool.py --chip esp32s3 -p /dev/cu.usbmodem* -b 460800 write_flash 0x0 StackCh
 
 Before flashing a merged image at `0x0`, make sure your microSD configuration backup is current. The image includes blank gaps over the NVS settings area. The binary contains no API key or Wi-Fi credentials. See [v1.8.9 dance notes](docs/DANCE_v1.8.9.md), [v1.8.7 web search notes](docs/WEB_SEARCH_v1.8.7.md), and [idle camera notes](docs/IDLE_CAMERA_TRACKING_v1.8.7.md).
 
+<img src="https://github.com/j15marti/StackChan-GPT/blob/main/docs/settings_page.png?raw=true" width="300" alt="Settings_Page">
+<img src="https://github.com/j15marti/StackChan-GPT/blob/main/docs/settings2.png?raw=true" width="300" alt="Settings_Page">
 ## Settings persistence (NVS + microSD)
 
 Wi-Fi credentials and OpenAI settings (API key, base URL, models, TTS voice, system prompt, wake word) live in **NVS** on the ESP32 and are mirrored to the microSD card whenever they change (web portal, on-device UI, BLE, or a successful Wi-Fi connect).
@@ -58,27 +60,7 @@ Example `stackchan_config.json` schema (do not commit real secrets):
 
 - **Beat-synced music dance**: Say “dance” / “dance to the music” to call `self.robot.dance`. Mic PCM onset energy estimates BPM (default 120), then the head alternates up/down for 16 beats and right/left for 16, while left/right neon halves flash red → blue → green → purple. Default duration **45 s** (`stop=true` ends early). Listening/thinking LEDs are overridden for the dance. See [docs/DANCE_v1.8.9.md](docs/DANCE_v1.8.9.md).
 
-## Highlights (`v1.8.7`)
 
-- **Live web search**: News, weather, sports scores, local businesses, and current facts via OpenAI Responses `web_search`. HTTP chat uses `self__web__search` → `/v1/responses`; GPT-Live also gets hosted `web_search` in Responses delegation. Setup portal **Latest web search and source links** shows citations. Weather/sports answers without URL citations are accepted.
-
-- **Whisper STT reliability**: Closes leftover Live sockets before Whisper upload and retries once on `STT HTTP -1` style failures.
-
-- **Deterministic idle camera tracking**: After 30 seconds at rest, StackChan checks the camera every 10 seconds for local pixel movement. If more than 10% of one quadrant changes, the head follows the movement toward the frame center at one-second intervals for no more than 30 seconds. Local frame differencing only — no AI upload.
-
-- **`GPT-Live` On-Device Launcher & Setup**:
-  - Selecting **`GPT-Live`** launches the on-device OpenAI voice and response engine (`OpenaiProtocol`).
-  - Configure your OpenAI API key, model, TTS voice (`nova`, `alloy`, `shimmer`, `echo`, `fable`, `onyx`, `coral`, `ash`, `sage`), custom wake word, and system prompt via the built-in QR Code / Local Web Portal (`SETUP -> GPT-Live -> OpenAI API`), microSD card (`stackchan_config.json`), BLE, or compile-time headers.
-- **Direct OpenAI API Integration (No Original Server Sign-In)**:
-  - Uses OpenAI `/v1/audio/transcriptions` (`whisper-1` / `gpt-4o-mini-transcribe`), `/v1/chat/completions` (`gpt-4o-mini` / `gpt-4o` with function calling), `/v1/audio/speech` (low-latency raw PCM streaming), and OpenAI Vision for the built-in camera.
-  - Supports `"Hi StackChan"` hardware WakeNet9 plus custom wake words (e.g., `"Hey Jarvis"`, `"Computer"`) with Whisper speech verification.
-- **Automatic microSD Card Backup & Restore**:
-  - Automatically backs up and restores Wi-Fi networks, OpenAI API key, voice/model preferences, and custom wake word to `/sdcard/stackchan_config.json` (plus optional `/sdcard/openai_key.txt`) so settings survive full flash erases (`0x0` reflashes). See **Settings persistence** above.
-- **Full Servo Motor & RGB LED Integration**:
-  - Automatic state lighting across all 12 RGB LEDs (Listening = Emerald Green, Thinking = Purple, Speaking = Cyan/Blue, Standby = Off) and natural speaking head movements (`SpeakingModifier` with servo nods/yaw drift + emotion postures).
-  - OpenAI Function/Tool Calling controls `self.robot.dance`, `self.robot.set_head_angles`, `self.robot.get_head_angles`, `self.robot.perform_gesture` (`nod`, `shake`, `dance`, `happy_dance`, `robot_dance`, `look_around`, `panic`, `center`), `self.robot.set_led_color`, `self.robot.set_led_side_color`, `self.robot.set_emotion`, `self.camera.take_photo`, reminders, speaker volume, and screen brightness.
-- **Compatible with StackChan World on iOS**:
-  - Preserves BLE Wi-Fi provisioning (`e2e5e5ff-1234-5678-1234-56789abcdef0`), BLE Motion/Avatar/RGB control (`e2e5e5e0-1234-5678-1234-56789abcdef0`), and LAN WebSocket Avatar/Video streaming.
 
 See [`firmware/README.md`](firmware/README.md) for complete setup, OpenAI API connection methods, build, and flash instructions.
 
