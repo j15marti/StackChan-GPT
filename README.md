@@ -6,6 +6,9 @@ This repository contains the official [m5stack/StackChan](https://github.com/m5s
 
 ## Quick Flash (`StackChan-GPT-v1.8.11.bin`)
 
+**Easiest method:** Download/flash the firmware from the [`m5stack burner page`](https://burner.m5stack.com/device/stackchan)
+
+**From terminal:**
 A pre-built merged firmware image for the 16 MB ESP32-S3 board ([`StackChan-GPT-v1.8.11.bin`](StackChan-GPT-v1.8.11.bin)) is included in the repository root:
 
 ```bash
